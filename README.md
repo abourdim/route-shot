@@ -38,18 +38,32 @@ From the menu: **2) Install dependencies** once, then **3) Launch route-shot** a
 | 5 | Clean screenshots |
 | 6 | Exit |
 
+## Specifying the URL
+
+Four ways, in priority order:
+
+```bash
+./menu.sh https://example.com              # 1. CLI arg to menu
+START_URL=https://example.com ./menu.sh    # 2. env var
+./menu.sh                                  # 3. last-used URL (remembered in .last-url)
+./menu.sh                                  # 4. default http://localhost:3000
+```
+
+The prompt always shows the current best guess as the default — press Enter to accept.
+
 ## Running without the menu
 
 ```bash
 npm install
-START_URL=http://localhost:8080 node route-shot.js
+node route-shot.js https://example.com            # positional arg
+START_URL=https://example.com node route-shot.js  # or env var
 ```
 
 Or install globally and use the `route-shot` command:
 
 ```bash
 npm install -g .
-START_URL=http://localhost:8080 route-shot
+route-shot https://example.com
 ```
 
 ## Configuration

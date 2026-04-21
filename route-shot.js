@@ -16,7 +16,8 @@ const fs = require('fs');
 const path = require('path');
 
 // --- config -----------------------------------------------------------------
-const START_URL    = process.env.START_URL || 'http://localhost:3000';
+// URL precedence: CLI arg > $START_URL > default
+const START_URL    = process.argv[2] || process.env.START_URL || 'http://localhost:3000';
 const OUTPUT_DIR   = process.env.OUTPUT_DIR || 'screenshots';
 const MAX_PAGES    = Number(process.env.MAX_PAGES || 200);
 const NAV_TIMEOUT  = Number(process.env.NAV_TIMEOUT || 15000);

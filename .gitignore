@@ -16,3 +16,4 @@ npm-debug.log*
 
 # runtime
 .server.pid
+.last-url

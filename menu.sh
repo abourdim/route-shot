@@ -7,6 +7,13 @@ CRAWLER="$SCRIPT_DIR/route-shot.js"
 OUTPUT_DIR="$SCRIPT_DIR/screenshots"
 SERVER_PORT="${ROUTE_SHOT_PORT:-8000}"
 SERVER_PID_FILE="$SCRIPT_DIR/.server.pid"
+LAST_URL_FILE="$SCRIPT_DIR/.last-url"
+
+# URL precedence: $1 (CLI arg) > $START_URL > remembered > default
+CLI_URL="${1:-}"
+REMEMBERED_URL=""
+[ -f "$LAST_URL_FILE" ] && REMEMBERED_URL="$(cat "$LAST_URL_FILE")"
+DEFAULT_URL="${CLI_URL:-${START_URL:-${REMEMBERED_URL:-http://localhost:3000}}}"
 
 # colors
 R=$'\033[0;31m'; G=$'\033[0;32m'; Y=$'\033[1;33m'; B=$'\033[0;34m'
@@ -67,11 +74,13 @@ cmd_launch() {
         printf "${Y}Playwright not installed. Run option 2 first.${NC}\n\n"
         return 1
     fi
-    read -r -p "  Start URL [http://localhost:3000]: " url
-    url="${url:-http://localhost:3000}"
+    read -r -p "  Start URL [$DEFAULT_URL]: " url
+    url="${url:-$DEFAULT_URL}"
+    printf "%s" "$url" > "$LAST_URL_FILE"
+    DEFAULT_URL="$url"
     printf "${B}→ Crawling %s${NC}\n\n" "$url"
     cd "$SCRIPT_DIR" || return 1
-    START_URL="$url" node "$CRAWLER"
+    node "$CRAWLER" "$url"
     printf "\n"
 }
 
