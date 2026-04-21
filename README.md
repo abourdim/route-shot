@@ -120,6 +120,10 @@ See [apps.example.json](apps.example.json). Each app supports:
 | `clicks` | no | Selector(s) to capture as variants (string or array) |
 | `clickMode` | no | `sequential` (default — clicks accumulate) or `independent` (reload between each, so each click is captured in isolation) |
 | `maxPages` | no | Per-app override of `MAX_PAGES` |
+| `autoButtons` | no | `true` to auto-discover all clickable buttons on the page and capture each as a variant (independent mode). Buttons matching the blocklist are skipped. |
+| `autoButtonsSelector` | no | Selector for auto-discovery (default `button, [role=button], input[type=button], input[type=submit]`) |
+| `autoButtonsBlocklist` | no | Regex (case-insensitive) of button texts to skip. Default: `delete\|remove\|clear\|stop\|reset\|pay\|confirm\|send\|logout\|sign.?out` |
+| `autoButtonsMax` | no | Safety cap on auto-discovered buttons per page (default 40) |
 
 Output layout:
 

@@ -22,6 +22,12 @@ const DEFAULTS = {
   clicks:      process.env.CLICK_SELECTORS || '',
   clickWait:   Number(process.env.CLICK_WAIT || 500),
   clickMode:   process.env.CLICK_MODE || 'sequential', // 'sequential' | 'independent'
+  autoButtons: process.env.AUTO_BUTTONS === '1',
+  autoButtonsSelector: process.env.AUTO_BUTTONS_SELECTOR ||
+    'button, [role=button], input[type=button], input[type=submit]',
+  autoButtonsBlocklist: process.env.AUTO_BUTTONS_BLOCKLIST ||
+    'delete|remove|clear|stop|reset|pay|confirm|send|logout|sign.?out',
+  autoButtonsMax: Number(process.env.AUTO_BUTTONS_MAX || 40),
 };
 
 function slugify(s) {
@@ -83,9 +89,39 @@ async function captureUrl(page, url, idx, cfg, outDir) {
 
   const variants = [];
   let vi = 0;
-  for (const sel of clicks) {
+
+  // auto-discover buttons (opt-in) and add them to the click list as text-based
+  // selectors, deduped against explicit clicks and blocklist.
+  const autoClicks = [];
+  if (cfg.autoButtons) {
+    const block = new RegExp(cfg.autoButtonsBlocklist, 'i');
+    const explicitTexts = new Set(clicks
+      .map((s) => (s.match(/has-text\(["'](.+?)["']\)/) || [])[1])
+      .filter(Boolean));
+    const texts = await page.$$eval(cfg.autoButtonsSelector, (els) =>
+      els.map((e) => ((e.innerText || e.value || e.getAttribute('aria-label') || '').trim()))
+    );
+    const seenText = new Set();
+    for (const t of texts) {
+      if (!t) continue;
+      if (block.test(t)) continue;
+      if (explicitTexts.has(t)) continue;
+      if (seenText.has(t)) continue;
+      seenText.add(t);
+      autoClicks.push(`${cfg.autoButtonsSelector.split(',')[0].trim()}:has-text(${JSON.stringify(t)})`);
+      if (autoClicks.length >= cfg.autoButtonsMax) break;
+    }
+  }
+
+  const allClicks = [...clicks, ...autoClicks];
+  // auto-discovered clicks always run in 'independent' isolation so state
+  // doesn't leak between unrelated buttons.
+  for (let ci = 0; ci < allClicks.length; ci++) {
+    const sel = allClicks[ci];
+    const isAuto = ci >= clicks.length;
+    const effectiveMode = isAuto ? 'independent' : mode;
     vi++;
-    if (mode === 'independent') {
+    if (effectiveMode === 'independent') {
       // reload + re-dismiss so each click is captured in isolation
       try {
         await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
@@ -102,7 +138,7 @@ async function captureUrl(page, url, idx, cfg, outDir) {
       await page.waitForTimeout(cfg.clickWait);
       const vname = `${String(idx).padStart(3, '0')}_${baseSlug}__v${String(vi).padStart(2, '0')}_${slugify(sel)}.png`;
       await page.screenshot({ path: path.join(outDir, vname), fullPage: true });
-      variants.push({ selector: sel, screenshot: vname });
+      variants.push(isAuto ? { selector: sel, screenshot: vname, auto: true } : { selector: sel, screenshot: vname });
     } catch (e) {
       variants.push({ selector: sel, error: e.message });
     }
