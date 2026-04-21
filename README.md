@@ -79,6 +79,8 @@ All options are environment variables — no flags to remember:
 | `INCLUDE_HASH` | `0` | Set `1` for hash-based routes (`#/about`) |
 | `DISMISS_SELECTOR` | _(none)_ | CSS selector(s) to click after each page load — e.g. a welcome modal or cookie banner. Comma-separated for multiple. Missing selectors are silently skipped. |
 | `DISMISS_WAIT` | `400` | ms to wait after a dismiss click before screenshotting |
+| `CLICK_SELECTORS` | _(none)_ | Comma-separated CSS selectors clicked **after** the main screenshot. Each click is captured as a variant screenshot, applied sequentially on the same page — useful for SPA tabs/buttons that change view state without changing URL. |
+| `CLICK_WAIT` | `500` | ms to wait after each click-variant before screenshotting |
 
 Example:
 
@@ -90,6 +92,14 @@ Dismiss a welcome modal before capturing:
 
 ```bash
 DISMISS_SELECTOR='button:has-text("Let'"'"'s Go")' node route-shot.js https://example.com
+```
+
+Capture each SPA tab as a variant screenshot (same URL, different view state):
+
+```bash
+DISMISS_SELECTOR='button:has-text("Let'"'"'s Go")' \
+CLICK_SELECTORS='button:has-text("Sensors"),button:has-text("Motors"),button:has-text("GamePad"),button:has-text("Graph")' \
+node route-shot.js https://abourdim.github.io/bit-playground/
 ```
 
 ## Output

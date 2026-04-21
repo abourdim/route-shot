@@ -26,6 +26,12 @@ const INCLUDE_HASH = process.env.INCLUDE_HASH === '1';
 // cookie banner). Comma-separated for multiple selectors, each tried in order.
 const DISMISS_SELECTOR = process.env.DISMISS_SELECTOR || '';
 const DISMISS_WAIT     = Number(process.env.DISMISS_WAIT || 400);
+// Optional comma-separated CSS selectors to click *after* the main screenshot,
+// capturing a variant screenshot for each. Useful for SPA tabs/buttons that
+// change view state without changing URL. Clicks are applied sequentially on
+// the same page, matching tab-like navigation.
+const CLICK_SELECTORS = process.env.CLICK_SELECTORS || '';
+const CLICK_WAIT      = Number(process.env.CLICK_WAIT || 500);
 // ----------------------------------------------------------------------------
 
 function slugify(url) {
@@ -87,11 +93,32 @@ function normalize(href, origin) {
         }
       }
 
-      const filename = `${String(idx).padStart(3, '0')}_${slugify(url)}.png`;
+      const baseSlug = slugify(url);
+      const filename = `${String(idx).padStart(3, '0')}_${baseSlug}.png`;
       await page.screenshot({
         path: path.join(OUTPUT_DIR, filename),
         fullPage: true,
       });
+
+      const variants = [];
+      if (CLICK_SELECTORS) {
+        const sels = CLICK_SELECTORS.split(',').map((s) => s.trim()).filter(Boolean);
+        let vi = 0;
+        for (const sel of sels) {
+          vi++;
+          try {
+            const el = await page.$(sel);
+            if (!el) { variants.push({ selector: sel, skipped: 'not found' }); continue; }
+            await el.click({ timeout: 2000 });
+            await page.waitForTimeout(CLICK_WAIT);
+            const vname = `${String(idx).padStart(3, '0')}_${baseSlug}__v${String(vi).padStart(2, '0')}_${slugify(sel)}.png`;
+            await page.screenshot({ path: path.join(OUTPUT_DIR, vname), fullPage: true });
+            variants.push({ selector: sel, screenshot: vname });
+          } catch (e) {
+            variants.push({ selector: sel, error: e.message });
+          }
+        }
+      }
 
       const hrefs = await page.$$eval('a[href]', (as) => as.map((a) => a.href));
       let discovered = 0;
@@ -104,8 +131,11 @@ function normalize(href, origin) {
         }
       }
 
-      results.push({ url, status, screenshot: filename });
-      console.log(`${status} (+${discovered} new)`);
+      const entry = { url, status, screenshot: filename };
+      if (variants.length) entry.variants = variants;
+      results.push(entry);
+      const vnote = variants.length ? `, ${variants.length} variant(s)` : '';
+      console.log(`${status} (+${discovered} new${vnote})`);
     } catch (err) {
       results.push({ url, error: err.message });
       console.log(`✗ ${err.message}`);
