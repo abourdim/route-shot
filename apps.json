@@ -1,0 +1,23 @@
+{
+  "apps": [
+    {
+      "name": "bit-playground",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "autoButtons": true,
+      "autoButtonsBlocklist": "^$",
+      "autoButtonsMax": 200
+    },
+    {
+      "name": "face-quest",
+      "url": "https://abourdim.github.io/face-quest/",
+      "autoButtons": true,
+      "maxPages": 20
+    },
+    {
+      "name": "noor-cast",
+      "url": "https://abourdim.github.io/noor-cast/",
+      "autoButtons": true
+    }
+  ]
+}

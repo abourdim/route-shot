@@ -67,6 +67,8 @@ async function dismissAll(page, selectors, waitMs) {
       const el = await page.$(sel);
       if (el) {
         await el.click({ timeout: 1000 });
+        // wait for the dismiss target to disappear (modal fade-out) before moving on
+        await page.waitForSelector(sel, { state: 'hidden', timeout: 2000 }).catch(() => {});
         await page.waitForTimeout(waitMs);
       }
     } catch { /* ignore */ }
@@ -99,7 +101,11 @@ async function captureUrl(page, url, idx, cfg, outDir) {
       .map((s) => (s.match(/has-text\(["'](.+?)["']\)/) || [])[1])
       .filter(Boolean));
     const texts = await page.$$eval(cfg.autoButtonsSelector, (els) =>
-      els.map((e) => ((e.innerText || e.value || e.getAttribute('aria-label') || '').trim()))
+      els.map((e) => {
+        const raw = (e.innerText || e.value || e.getAttribute('aria-label') || '').trim();
+        // collapse whitespace (newlines, multiple spaces) so :has-text() matches DOM text
+        return raw.replace(/\s+/g, ' ');
+      })
     );
     const seenText = new Set();
     for (const t of texts) {
@@ -134,7 +140,8 @@ async function captureUrl(page, url, idx, cfg, outDir) {
     try {
       const el = await page.$(sel);
       if (!el) { variants.push({ selector: sel, skipped: 'not found' }); continue; }
-      await el.click({ timeout: 2000 });
+      await el.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+      await el.click({ timeout: 3000 });
       await page.waitForTimeout(cfg.clickWait);
       const vname = `${String(idx).padStart(3, '0')}_${baseSlug}__v${String(vi).padStart(2, '0')}_${slugify(sel)}.png`;
       await page.screenshot({ path: path.join(outDir, vname), fullPage: true });
