@@ -89,13 +89,19 @@ cmd_import() {
     read -r -p "  Recording file (.json): " rec
     [ -f "$rec" ] || { printf "${R}Not found:${NC} %s\n\n" "$rec"; return 1; }
     read -r -p "  App name (optional): " name
+    printf "  Map recording to:\n"
+    printf "    1) preSteps  (setup/login flow, runs once)\n"
+    printf "    2) clicks    (each click = one variant screenshot)\n"
+    read -r -p "  Choice [2]: " mode
     read -r -p "  Merge into apps.json? [Y/n]: " ans
     cd "$SCRIPT_DIR" || return 1
     local merge_args=""
     case "$ans" in n|N|no|NO) merge_args="" ;; *) merge_args="--merge apps.json" ;; esac
     local name_args=""
     [ -n "$name" ] && name_args="--name $name"
-    node "$CRAWLER" --import-recording "$rec" $name_args $merge_args
+    local mode_args="--as-clicks"
+    case "$mode" in 1) mode_args="" ;; esac
+    node "$CRAWLER" --import-recording "$rec" $name_args $mode_args $merge_args
     printf "\n"
 }
 

@@ -1,0 +1,194 @@
+{
+    "title": "5",
+    "steps": [
+        {
+            "type": "setViewport",
+            "width": 3453,
+            "height": 1588,
+            "deviceScaleFactor": 1,
+            "isMobile": false,
+            "hasTouch": false,
+            "isLandscape": false
+        },
+        {
+            "type": "navigate",
+            "url": "https://abourdim.github.io/bit-playground/",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://abourdim.github.io/bit-playground/",
+                    "title": "micro:bit Playground"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/🎛️ Controls"
+                ],
+                [
+                    "#controlsTabBtn"
+                ],
+                [
+                    "xpath///*[@id=\"controlsTabBtn\"]"
+                ],
+                [
+                    "pierce/#controlsTabBtn"
+                ],
+                [
+                    "text/🎛️\n                         "
+                ]
+            ],
+            "offsetY": 30.72088623046875,
+            "offsetX": 99.3741455078125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#sensesTabBtn > span:nth-of-type(2)"
+                ],
+                [
+                    "xpath///*[@id=\"sensesTabBtn\"]/span[2]"
+                ],
+                [
+                    "pierce/#sensesTabBtn > span:nth-of-type(2)"
+                ]
+            ],
+            "offsetY": 7.01171875,
+            "offsetX": 20
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#servosTabBtn > span.mode-icon"
+                ],
+                [
+                    "xpath///*[@id=\"servosTabBtn\"]/span[1]"
+                ],
+                [
+                    "pierce/#servosTabBtn > span.mode-icon"
+                ]
+            ],
+            "offsetY": 13.13671875,
+            "offsetX": 19.0234375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#sensesTabBtn > span.mode-icon"
+                ],
+                [
+                    "xpath///*[@id=\"sensesTabBtn\"]/span[1]"
+                ],
+                [
+                    "pierce/#sensesTabBtn > span.mode-icon"
+                ]
+            ],
+            "offsetY": 18.49298095703125,
+            "offsetX": 18.299560546875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/🎮 GamePad"
+                ],
+                [
+                    "#gamepadTabBtn"
+                ],
+                [
+                    "xpath///*[@id=\"gamepadTabBtn\"]"
+                ],
+                [
+                    "pierce/#gamepadTabBtn"
+                ],
+                [
+                    "text/🎮\n                            GamePad"
+                ]
+            ],
+            "offsetY": 31.72088623046875,
+            "offsetX": 108.9993896484375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#graphTabBtn > span.mode-icon"
+                ],
+                [
+                    "xpath///*[@id=\"graphTabBtn\"]/span[1]"
+                ],
+                [
+                    "pierce/#graphTabBtn > span.mode-icon"
+                ]
+            ],
+            "offsetY": 2.49298095703125,
+            "offsetX": 17.1571044921875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#board3dTabBtn > span:nth-of-type(2)"
+                ],
+                [
+                    "xpath///*[@id=\"board3dTabBtn\"]/span[2]"
+                ],
+                [
+                    "pierce/#board3dTabBtn > span:nth-of-type(2)"
+                ]
+            ],
+            "offsetY": 12.27423095703125,
+            "offsetX": 8.3935546875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#board3dCanvas"
+                ],
+                [
+                    "xpath///*[@id=\"board3dCanvas\"]"
+                ],
+                [
+                    "pierce/#board3dCanvas"
+                ]
+            ],
+            "offsetY": 60.94921875,
+            "offsetX": 884.89453125,
+            "duration": 1087.5999999996275
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#othersTabBtn > span:nth-of-type(2)"
+                ],
+                [
+                    "xpath///*[@id=\"othersTabBtn\"]/span[2]"
+                ],
+                [
+                    "pierce/#othersTabBtn > span:nth-of-type(2)"
+                ],
+                [
+                    "text/More"
+                ]
+            ],
+            "offsetY": 6.27423095703125,
+            "offsetX": 27.132568359375
+        }
+    ]
+}

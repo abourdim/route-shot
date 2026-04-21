@@ -332,7 +332,7 @@ async function crawlApp(browser, app) {
 // Convert a Chrome DevTools Recorder JSON export into route-shot preSteps.
 // Recorder schema: { title, steps: [{ type, url?, selectors?, value?, ... }] }
 // See https://developer.chrome.com/docs/devtools/recorder/reference
-function importRecording(recordingPath, { appName, startUrl } = {}) {
+function importRecording(recordingPath, { appName, startUrl, asClicks = false } = {}) {
   const raw = fs.readFileSync(recordingPath, 'utf8');
   let rec;
   try { rec = JSON.parse(raw); }
@@ -386,10 +386,32 @@ function importRecording(recordingPath, { appName, startUrl } = {}) {
         break;
     }
   }
+  const cleanPre = pre.filter((s) => !s._skipped);
+
+  // --as-clicks: treat each recorded click as a variant screenshot instead of
+  // a one-shot setup step. Works best for recordings that tour tabs/buttons
+  // on a single page (no login, no form fill). Clicks become the clicks[]
+  // array (independent mode); non-click steps move to preSteps as setup.
+  if (asClicks) {
+    const variantClicks = [];
+    const setup = [];
+    for (const s of cleanPre) {
+      if (s.action === 'click' && s.selector) variantClicks.push(s.selector);
+      else setup.push(s);
+    }
+    return {
+      name: appName || rec.title || 'imported-flow',
+      url: inferredUrl || 'http://localhost:3000',
+      clickMode: 'independent',
+      ...(setup.length ? { preSteps: setup } : {}),
+      clicks: variantClicks,
+    };
+  }
+
   return {
     name: appName || rec.title || 'imported-flow',
     url: inferredUrl || 'http://localhost:3000',
-    preSteps: pre.filter((s) => !s._skipped),
+    preSteps: cleanPre,
     autoButtons: true,
   };
 }
@@ -409,6 +431,7 @@ function importRecording(recordingPath, { appName, startUrl } = {}) {
     const appEntry = importRecording(recPath, {
       appName:  nameIdx !== -1 ? args[nameIdx + 1] : undefined,
       startUrl: urlIdx  !== -1 ? args[urlIdx  + 1] : undefined,
+      asClicks: args.includes('--as-clicks'),
     });
     if (mergeIdx !== -1) {
       const target = args[mergeIdx + 1] || 'apps.json';

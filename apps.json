@@ -18,6 +18,21 @@
       "name": "noor-cast",
       "url": "https://abourdim.github.io/noor-cast/",
       "autoButtons": true
+    },
+    {
+      "name": "bit-playground-tabs",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "clickMode": "independent",
+      "clicks": [
+        "#controlsTabBtn",
+        "#sensesTabBtn",
+        "#servosTabBtn",
+        "#gamepadTabBtn",
+        "#graphTabBtn",
+        "#board3dTabBtn",
+        "#othersTabBtn"
+      ]
     }
   ]
 }

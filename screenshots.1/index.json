@@ -1,0 +1,23 @@
+{
+  "count": 3,
+  "apps": [
+    {
+      "name": "bit-playground",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "outDir": "screenshots\\bit_playground",
+      "count": 3
+    },
+    {
+      "name": "face-quest",
+      "url": "https://abourdim.github.io/face-quest/",
+      "outDir": "screenshots\\face_quest",
+      "count": 1
+    },
+    {
+      "name": "noor-cast",
+      "url": "https://abourdim.github.io/noor-cast/",
+      "outDir": "screenshots\\noor_cast",
+      "count": 14
+    }
+  ]
+}
