@@ -5,6 +5,8 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CRAWLER="$SCRIPT_DIR/route-shot.js"
 OUTPUT_DIR="$SCRIPT_DIR/screenshots"
+SERVER_PORT="${ROUTE_SHOT_PORT:-8000}"
+SERVER_PID_FILE="$SCRIPT_DIR/.server.pid"
 
 # colors
 R=$'\033[0;31m'; G=$'\033[0;32m'; Y=$'\033[1;33m'; B=$'\033[0;34m'
@@ -89,6 +91,60 @@ cmd_open() {
     fi
 }
 
+cmd_server() {
+    if [ ! -d "$OUTPUT_DIR" ]; then
+        printf "\n${Y}No screenshots folder yet. Run option 3 first.${NC}\n\n"
+        return 0
+    fi
+    if [ -f "$SERVER_PID_FILE" ] && kill -0 "$(cat "$SERVER_PID_FILE")" 2>/dev/null; then
+        printf "\n${Y}Server already running (pid $(cat "$SERVER_PID_FILE")) on port %s.${NC}\n\n" "$SERVER_PORT"
+        return 0
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        ( cd "$OUTPUT_DIR" && nohup python3 -m http.server "$SERVER_PORT" >/dev/null 2>&1 & echo $! > "$SERVER_PID_FILE" )
+    elif command -v python >/dev/null 2>&1; then
+        ( cd "$OUTPUT_DIR" && nohup python -m http.server "$SERVER_PORT" >/dev/null 2>&1 & echo $! > "$SERVER_PID_FILE" )
+    elif command -v npx >/dev/null 2>&1; then
+        ( cd "$OUTPUT_DIR" && nohup npx --yes serve -l "$SERVER_PORT" . >/dev/null 2>&1 & echo $! > "$SERVER_PID_FILE" )
+    else
+        printf "\n${R}Need python3 or npx to start a server.${NC}\n\n"
+        return 1
+    fi
+    sleep 1
+    printf "\n${G}→ Serving %s at http://localhost:%s${NC}\n\n" "$OUTPUT_DIR" "$SERVER_PORT"
+}
+
+cmd_open_web() {
+    local url="http://localhost:$SERVER_PORT"
+    if [ ! -f "$SERVER_PID_FILE" ] || ! kill -0 "$(cat "$SERVER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
+        printf "\n${Y}Server not running — starting it.${NC}\n"
+        cmd_server || return 1
+    fi
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" >/dev/null 2>&1 &
+    elif command -v open >/dev/null 2>&1; then
+        open "$url"
+    elif command -v start >/dev/null 2>&1; then
+        start "$url"
+    else
+        printf "Open manually: %s\n\n" "$url"
+        return 0
+    fi
+    printf "→ Opened %s\n\n" "$url"
+}
+
+cmd_stop_server() {
+    if [ -f "$SERVER_PID_FILE" ]; then
+        local pid
+        pid="$(cat "$SERVER_PID_FILE")"
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null
+            printf "\n${G}Server stopped (pid %s).${NC}\n\n" "$pid"
+        fi
+        rm -f "$SERVER_PID_FILE"
+    fi
+}
+
 cmd_clean() {
     if [ ! -d "$OUTPUT_DIR" ]; then
         printf "\n${Y}No screenshots folder to clean.${NC}\n\n"
@@ -120,9 +176,12 @@ menu() {
     printf "  1) Check install\n"
     printf "  2) Install dependencies\n"
     printf "  3) Launch route-shot\n"
-    printf "  4) Open screenshots folder\n"
-    printf "  5) Clean screenshots\n"
-    printf "  6) Exit\n"
+    printf "  4) Start web server      (http://localhost:%s)\n" "$SERVER_PORT"
+    printf "  5) Open in browser\n"
+    printf "  6) Stop web server\n"
+    printf "  7) Open screenshots folder\n"
+    printf "  8) Clean screenshots\n"
+    printf "  9) Exit\n"
     printf "\n"
 }
 
@@ -135,9 +194,12 @@ while true; do
         1) cmd_check ;;
         2) cmd_install ;;
         3) cmd_launch ;;
-        4) cmd_open ;;
-        5) cmd_clean ;;
-        6|q|Q|exit) printf "\nBye.\n"; exit 0 ;;
+        4) cmd_server ;;
+        5) cmd_open_web ;;
+        6) cmd_stop_server ;;
+        7) cmd_open ;;
+        8) cmd_clean ;;
+        9|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
         *) printf "\n${R}Invalid choice.${NC}\n" ;;
     esac
 done

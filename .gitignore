@@ -13,3 +13,6 @@ Thumbs.db
 # logs
 *.log
 npm-debug.log*
+
+# runtime
+.server.pid
