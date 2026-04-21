@@ -84,6 +84,21 @@ cmd_launch() {
     printf "\n"
 }
 
+cmd_import() {
+    printf "\n${BOLD}Import DevTools Recorder JSON${NC}\n"
+    read -r -p "  Recording file (.json): " rec
+    [ -f "$rec" ] || { printf "${R}Not found:${NC} %s\n\n" "$rec"; return 1; }
+    read -r -p "  App name (optional): " name
+    read -r -p "  Merge into apps.json? [Y/n]: " ans
+    cd "$SCRIPT_DIR" || return 1
+    local merge_args=""
+    case "$ans" in n|N|no|NO) merge_args="" ;; *) merge_args="--merge apps.json" ;; esac
+    local name_args=""
+    [ -n "$name" ] && name_args="--name $name"
+    node "$CRAWLER" --import-recording "$rec" $name_args $merge_args
+    printf "\n"
+}
+
 cmd_batch() {
     printf "\n${BOLD}Batch run${NC}\n"
     local default_cfg="$SCRIPT_DIR/apps.json"
@@ -201,12 +216,13 @@ menu() {
     printf "  2) Install dependencies\n"
     printf "  3) Launch route-shot (single URL)\n"
     printf "  4) Batch run (apps.json)\n"
-    printf "  5) Start web server      (http://localhost:%s)\n" "$SERVER_PORT"
-    printf "  6) Open in browser\n"
-    printf "  7) Stop web server\n"
-    printf "  8) Open screenshots folder\n"
-    printf "  9) Clean screenshots\n"
-    printf " 10) Exit\n"
+    printf "  5) Import DevTools Recorder → apps.json\n"
+    printf "  6) Start web server      (http://localhost:%s)\n" "$SERVER_PORT"
+    printf "  7) Open in browser\n"
+    printf "  8) Stop web server\n"
+    printf "  9) Open screenshots folder\n"
+    printf " 10) Clean screenshots\n"
+    printf " 11) Exit\n"
     printf "\n"
 }
 
@@ -220,12 +236,13 @@ while true; do
         2) cmd_install ;;
         3) cmd_launch ;;
         4) cmd_batch ;;
-        5) cmd_server ;;
-        6) cmd_open_web ;;
-        7) cmd_stop_server ;;
-        8) cmd_open ;;
-        9) cmd_clean ;;
-        10|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
+        5) cmd_import ;;
+        6) cmd_server ;;
+        7) cmd_open_web ;;
+        8) cmd_stop_server ;;
+        9) cmd_open ;;
+        10) cmd_clean ;;
+        11|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
         *) printf "\n${R}Invalid choice.${NC}\n" ;;
     esac
 done

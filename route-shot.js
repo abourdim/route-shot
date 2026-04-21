@@ -329,9 +329,92 @@ async function crawlApp(browser, app) {
   return { name: app.name || null, url: cfg.url, outDir, count: results.length };
 }
 
+// Convert a Chrome DevTools Recorder JSON export into route-shot preSteps.
+// Recorder schema: { title, steps: [{ type, url?, selectors?, value?, ... }] }
+// See https://developer.chrome.com/docs/devtools/recorder/reference
+function importRecording(recordingPath, { appName, startUrl } = {}) {
+  const rec = JSON.parse(fs.readFileSync(recordingPath, 'utf8'));
+  const steps = Array.isArray(rec.steps) ? rec.steps : [];
+  const pickSelector = (sels) => {
+    if (!Array.isArray(sels) || !sels.length) return null;
+    // Recorder stores selectors as [[css], [xpath], ['aria/...', 'aria/...'], ...]
+    // Prefer the shortest css-looking one (avoid aria/ and xpath prefixes).
+    const flat = sels.map((s) => Array.isArray(s) ? s : [s]).flat();
+    const css  = flat.find((s) => typeof s === 'string' && !s.startsWith('aria/') && !s.startsWith('xpath/') && !s.startsWith('pierce/') && !s.startsWith('text/'));
+    return css || flat[0];
+  };
+  const pre = [];
+  let inferredUrl = startUrl || null;
+  for (const s of steps) {
+    switch (s.type) {
+      case 'setViewport': // ignore — size isn't a preStep
+        break;
+      case 'navigate':
+        if (!inferredUrl) inferredUrl = s.url;
+        pre.push({ action: 'goto', value: s.url });
+        break;
+      case 'click':
+      case 'doubleClick':
+        pre.push({ action: 'click', selector: pickSelector(s.selectors) });
+        break;
+      case 'change':
+        pre.push({ action: 'fill', selector: pickSelector(s.selectors), value: s.value ?? '' });
+        break;
+      case 'keyDown':
+      case 'keyUp':
+        if (s.key) pre.push({ action: 'press', selector: pickSelector(s.selectors) || 'body', value: s.key });
+        break;
+      case 'waitForElement':
+        pre.push({ action: 'waitForSelector', selector: pickSelector(s.selectors), timeout: s.timeout });
+        break;
+      case 'waitForURL':
+      case 'navigateBack': // approximate
+        if (s.url) pre.push({ action: 'waitForURL', value: s.url });
+        break;
+      default:
+        // unrecognized — skip with a comment so user can see what was dropped
+        pre.push({ action: 'wait', value: 0, _skipped: `unsupported type: ${s.type}` });
+        break;
+    }
+  }
+  return {
+    name: appName || rec.title || 'imported-flow',
+    url: inferredUrl || 'http://localhost:3000',
+    preSteps: pre.filter((s) => !s._skipped),
+    autoButtons: true,
+  };
+}
+
 // --- entry ------------------------------------------------------------------
 (async () => {
   const args = process.argv.slice(2);
+
+  // Subcommand: import a DevTools Recorder JSON → apps.json entry (stdout, or merge)
+  const importIdx = args.indexOf('--import-recording');
+  if (importIdx !== -1) {
+    const recPath  = args[importIdx + 1];
+    if (!recPath) { console.error('--import-recording requires a path'); process.exit(1); }
+    const nameIdx  = args.indexOf('--name');
+    const urlIdx   = args.indexOf('--url');
+    const mergeIdx = args.indexOf('--merge');
+    const appEntry = importRecording(recPath, {
+      appName:  nameIdx !== -1 ? args[nameIdx + 1] : undefined,
+      startUrl: urlIdx  !== -1 ? args[urlIdx  + 1] : undefined,
+    });
+    if (mergeIdx !== -1) {
+      const target = args[mergeIdx + 1] || 'apps.json';
+      const existing = fs.existsSync(target) ? JSON.parse(fs.readFileSync(target, 'utf8')) : { apps: [] };
+      const list = existing.apps || existing;
+      const i = list.findIndex((a) => a.name === appEntry.name);
+      if (i >= 0) list[i] = { ...list[i], ...appEntry }; else list.push(appEntry);
+      fs.writeFileSync(target, JSON.stringify(existing.apps ? existing : { apps: list }, null, 2));
+      console.log(`Merged into ${target}: ${appEntry.name} (${appEntry.preSteps.length} preSteps)`);
+    } else {
+      console.log(JSON.stringify(appEntry, null, 2));
+    }
+    return;
+  }
+
   const batchIdx = args.indexOf('--batch');
   const isBatch  = batchIdx !== -1;
 

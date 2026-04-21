@@ -144,7 +144,18 @@ See [apps.example.json](apps.example.json). Each app supports:
 }
 ```
 
-Pair this with Chrome DevTools Recorder: record the login flow, export as Playwright, translate the steps into `preSteps` entries.
+Pair this with Chrome DevTools Recorder — and let route-shot do the translation:
+
+```bash
+# 1. In Chrome DevTools → Recorder → record → Export as "JSON" → save login.json
+# 2. Convert + merge into apps.json in one command:
+node route-shot.js --import-recording login.json --name my-app --merge apps.json
+
+# 3. Run the batch — the login preSteps play, then auto-explore takes over
+node route-shot.js --batch apps.json
+```
+
+Without `--merge`, the command prints the JSON app entry to stdout so you can paste it manually. Use `--name` to override the app name (defaults to the Recorder title).
 
 Output layout:
 
