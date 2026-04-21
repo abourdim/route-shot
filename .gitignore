@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# output
+screenshots/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*

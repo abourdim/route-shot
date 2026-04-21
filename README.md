@@ -1,0 +1,113 @@
+# route-shot
+
+Visit every route of a web app and save a full-page screenshot of each one. Built on [Playwright](https://playwright.dev/). Ships with an interactive bash menu for install / launch / cleanup.
+
+![shell](https://img.shields.io/badge/shell-bash-4EAA25) ![node](https://img.shields.io/badge/node-%3E%3D18-339933) ![license](https://img.shields.io/badge/license-MIT-blue)
+
+## What it does
+
+Starting from a URL you provide, `route-shot` does a breadth-first walk of every `<a href>` it finds on the same origin, takes a full-page screenshot of each unique page, and writes an `index.json` mapping URLs → screenshot files + HTTP status.
+
+Stops at a configurable page cap (default 200) so a linky site can't run forever.
+
+## Quick start
+
+```bash
+git clone https://github.com/abourdim/route-shot.git
+cd route-shot
+chmod +x menu.sh
+./menu.sh
+```
+
+From the menu: **2) Install dependencies** once, then **3) Launch route-shot** any time.
+
+## Requirements
+
+- Node.js 18 or newer
+- npm
+- Linux or macOS for the menu (the crawler itself runs anywhere Node + Playwright run, including Windows)
+
+## Menu options
+
+| # | Action |
+|---|--------|
+| 1 | Check install — verifies Node, npm, Playwright module, Chromium |
+| 2 | Install dependencies — runs `npm install` + downloads Chromium |
+| 3 | Launch route-shot — prompts for a start URL, writes screenshots to `./screenshots/` |
+| 4 | Open screenshots folder |
+| 5 | Clean screenshots |
+| 6 | Exit |
+
+## Running without the menu
+
+```bash
+npm install
+START_URL=http://localhost:8080 node route-shot.js
+```
+
+Or install globally and use the `route-shot` command:
+
+```bash
+npm install -g .
+START_URL=http://localhost:8080 route-shot
+```
+
+## Configuration
+
+All options are environment variables — no flags to remember:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `START_URL` | `http://localhost:3000` | Where to start the crawl |
+| `OUTPUT_DIR` | `screenshots` | Where PNGs and `index.json` land |
+| `MAX_PAGES` | `200` | Safety cap on total pages visited |
+| `NAV_TIMEOUT` | `15000` | ms per page load |
+| `INCLUDE_HASH` | `0` | Set `1` for hash-based routes (`#/about`) |
+
+Example:
+
+```bash
+START_URL=https://example.com MAX_PAGES=50 OUTPUT_DIR=./out node route-shot.js
+```
+
+## Output
+
+```
+screenshots/
+├── 001_localhost_3000.png
+├── 002_localhost_3000_about.png
+├── 003_localhost_3000_contact.png
+└── index.json
+```
+
+`index.json` looks like:
+
+```json
+{
+  "start": "http://localhost:3000",
+  "count": 3,
+  "pages": [
+    { "url": "http://localhost:3000",         "status": 200, "screenshot": "001_localhost_3000.png" },
+    { "url": "http://localhost:3000/about",   "status": 200, "screenshot": "002_localhost_3000_about.png" },
+    { "url": "http://localhost:3000/contact", "status": 200, "screenshot": "003_localhost_3000_contact.png" }
+  ]
+}
+```
+
+## Limitations
+
+- Follows `<a href>` links only — routes reachable only via button clicks or JS navigation won't be discovered. A click-exploration mode is on the roadmap.
+- No login handling out of the box. Add a `page.goto → fill → click` block before the crawl loop; the browser context's cookies will carry through.
+- Same-origin only. External links are ignored by design.
+- Does not respect `robots.txt` — assumes you own the target.
+
+## Roadmap
+
+- [ ] Multi-viewport capture (desktop / tablet / mobile in one run)
+- [ ] Optional button-exploration mode with DOM-diff deduplication
+- [ ] HTML report with thumbnails instead of raw folder
+- [ ] Auth helper (env-driven login flow)
+
+## License
+
+MIT — see [LICENSE](LICENSE).

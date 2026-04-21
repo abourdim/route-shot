@@ -1,0 +1,35 @@
+{
+  "name": "route-shot",
+  "version": "1.0.0",
+  "description": "Visit every route of a web app and save a full-page screenshot of each one.",
+  "main": "route-shot.js",
+  "bin": {
+    "route-shot": "route-shot.js"
+  },
+  "scripts": {
+    "start": "node route-shot.js",
+    "postinstall": "playwright install chromium"
+  },
+  "keywords": [
+    "playwright",
+    "screenshot",
+    "crawler",
+    "snapshot",
+    "web",
+    "testing",
+    "route-shot"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.59.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "route-shot.js",
+    "menu.sh",
+    "README.md",
+    "LICENSE"
+  ]
+}
