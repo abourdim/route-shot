@@ -74,6 +74,22 @@ function toList(v) {
   return String(v).split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+// Replay a list of setup steps (login flow, onboarding dismissal, etc.).
+// Supports the subset of actions DevTools Recorder exports commonly produce.
+async function runSteps(page, steps, navTimeout) {
+  for (const step of steps) {
+    const { action } = step;
+    if (action === 'goto')            await page.goto(step.value || step.url, { waitUntil: 'networkidle', timeout: navTimeout });
+    else if (action === 'click')      await page.locator(step.selector).first().click({ timeout: 5000 });
+    else if (action === 'fill')       await page.locator(step.selector).first().fill(step.value ?? '', { timeout: 5000 });
+    else if (action === 'press')      await page.locator(step.selector).first().press(step.value || 'Enter', { timeout: 5000 });
+    else if (action === 'waitForSelector') await page.waitForSelector(step.selector, { timeout: step.timeout || 10000 });
+    else if (action === 'waitForURL') await page.waitForURL(step.value || step.url, { timeout: step.timeout || 10000 });
+    else if (action === 'wait')       await page.waitForTimeout(Number(step.value || step.ms || 500));
+    else throw new Error(`unknown preStep action: ${action}`);
+  }
+}
+
 async function dismissAll(page, selectors, waitMs) {
   for (const sel of selectors) {
     try {
@@ -271,6 +287,19 @@ async function crawlApp(browser, app) {
   const results = [];
 
   console.log(`\n=== ${app.name || cfg.url} ===`);
+
+  // Run preSteps once (login / onboarding / setup) before crawling.
+  // Session cookies and localStorage persist in the context, so subsequent
+  // BFS navigations and independent-mode reloads stay authenticated.
+  if (Array.isArray(cfg.preSteps) && cfg.preSteps.length) {
+    try {
+      await page.goto(cfg.url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
+      await runSteps(page, cfg.preSteps, cfg.navTimeout);
+      console.log(`  preSteps: ${cfg.preSteps.length} step(s) completed`);
+    } catch (e) {
+      console.error(`  preSteps failed: ${e.message}`);
+    }
+  }
 
   while (queue.length && results.length < cfg.maxPages) {
     const url = queue.shift();

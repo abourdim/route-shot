@@ -126,6 +126,25 @@ See [apps.example.json](apps.example.json). Each app supports:
 | `autoButtonsMax` | no | Safety cap on auto-discovered buttons per page (default 40) |
 | `maxDepth` | no | Recursive exploration depth for auto-buttons (default 0 = flat). `1` = click A → screenshot + click all newly-revealed buttons. BFS over click paths; state restored by reload+replay. |
 | `headful` | no | `true` launches visible Chromium (handy for debugging modals). Any app setting this flips the whole run to headful. Env var: `HEADFUL=1`. |
+| `preSteps` | no | Array of setup steps replayed once before crawling — for login flows, onboarding dismissal, etc. Actions: `goto`, `click`, `fill`, `press`, `waitForSelector`, `waitForURL`, `wait`. Session cookies and localStorage persist, so subsequent navigations stay authenticated. |
+
+### preSteps example (login flow)
+
+```json
+{
+  "name": "my-app-behind-login",
+  "url": "https://app.example.com",
+  "preSteps": [
+    { "action": "fill",       "selector": "input[name=email]",    "value": "demo@example.com" },
+    { "action": "fill",       "selector": "input[name=password]", "value": "hunter2" },
+    { "action": "click",      "selector": "button:has-text(\"Sign in\")" },
+    { "action": "waitForURL", "value": "**/dashboard" }
+  ],
+  "autoButtons": true
+}
+```
+
+Pair this with Chrome DevTools Recorder: record the login flow, export as Playwright, translate the steps into `preSteps` entries.
 
 Output layout:
 
