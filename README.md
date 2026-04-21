@@ -124,6 +124,8 @@ See [apps.example.json](apps.example.json). Each app supports:
 | `autoButtonsSelector` | no | Selector for auto-discovery (default `button, [role=button], input[type=button], input[type=submit]`) |
 | `autoButtonsBlocklist` | no | Regex (case-insensitive) of button texts to skip. Default: `delete\|remove\|clear\|stop\|reset\|pay\|confirm\|send\|logout\|sign.?out` |
 | `autoButtonsMax` | no | Safety cap on auto-discovered buttons per page (default 40) |
+| `maxDepth` | no | Recursive exploration depth for auto-buttons (default 0 = flat). `1` = click A → screenshot + click all newly-revealed buttons. BFS over click paths; state restored by reload+replay. |
+| `headful` | no | `true` launches visible Chromium (handy for debugging modals). Any app setting this flips the whole run to headful. Env var: `HEADFUL=1`. |
 
 Output layout:
 

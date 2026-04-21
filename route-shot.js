@@ -28,6 +28,12 @@ const DEFAULTS = {
   autoButtonsBlocklist: process.env.AUTO_BUTTONS_BLOCKLIST ||
     'delete|remove|clear|stop|reset|pay|confirm|send|logout|sign.?out',
   autoButtonsMax: Number(process.env.AUTO_BUTTONS_MAX || 40),
+  // Recursive auto-exploration: after each auto-click, optionally discover
+  // newly-revealed buttons and click them too (BFS over click paths).
+  // 0 = off (flat), 1 = click-then-click, etc. Kept low to bound state space.
+  maxDepth:    Number(process.env.MAX_DEPTH || 0),
+  // Launch visible Chromium instead of headless — handy for debugging modals.
+  headful:     process.env.HEADFUL === '1',
 };
 
 function slugify(s, fallback = 'item') {
@@ -99,30 +105,45 @@ async function captureUrl(page, url, idx, cfg, outDir) {
   const variants = [];
   let vi = 0;
 
-  // Build click list: explicit clicks (as selectors) + auto-discovered (as
-  // {label, role-name} objects for exact role-based matching).
-  const autoItems = [];
-  if (cfg.autoButtons) {
+  // Discover auto-buttons on the current page state. Dedupes by outerHTML-hash
+  // (stricter than text — two buttons with same label but different attrs are
+  // treated as distinct) AND by visible label (so we don't re-click the same
+  // stateful button after a rerender changed its outerHTML).
+  async function discoverAutoButtons(seenHtmlHashes, seenLabels, explicitLabels) {
     const block = new RegExp(cfg.autoButtonsBlocklist, 'i');
-    const explicitLabels = new Set(clicks
-      .map((s) => (s.match(/has-text\(["'](.+?)["']\)/) || s.match(/text-is\(["'](.+?)["']\)/) || [])[1])
-      .filter(Boolean));
-    const texts = await page.$$eval(cfg.autoButtonsSelector, (els) =>
+    const rows = await page.$$eval(cfg.autoButtonsSelector, (els) =>
       els.map((e) => {
         const raw = (e.innerText || e.value || e.getAttribute('aria-label') || '').trim();
-        return raw.replace(/\s+/g, ' ');
+        return {
+          label: raw.replace(/\s+/g, ' '),
+          html: e.outerHTML.replace(/\s+/g, ' ').slice(0, 200),
+        };
       })
     );
-    const seenText = new Set();
-    for (const t of texts) {
-      if (!t) continue;
-      if (block.test(t)) continue;
-      if (explicitLabels.has(t)) continue;
-      if (seenText.has(t)) continue;
-      seenText.add(t);
-      autoItems.push({ auto: true, label: t });
-      if (autoItems.length >= cfg.autoButtonsMax) break;
+    const out = [];
+    for (const r of rows) {
+      if (!r.label) continue;
+      if (block.test(r.label)) continue;
+      if (explicitLabels.has(r.label)) continue;
+      const hh = shortHash(r.html);
+      if (seenHtmlHashes.has(hh)) continue;
+      if (seenLabels.has(r.label)) continue;
+      seenHtmlHashes.add(hh);
+      seenLabels.add(r.label);
+      out.push({ auto: true, label: r.label });
+      if (out.length + seenHtmlHashes.size >= cfg.autoButtonsMax) break;
     }
+    return out;
+  }
+
+  const autoItems = [];
+  let autoSeenHtml = new Set();
+  let autoSeenLabel = new Set();
+  const explicitLabels = new Set(clicks
+    .map((s) => (s.match(/has-text\(["'](.+?)["']\)/) || s.match(/text-is\(["'](.+?)["']\)/) || [])[1])
+    .filter(Boolean));
+  if (cfg.autoButtons) {
+    autoItems.push(...(await discoverAutoButtons(autoSeenHtml, autoSeenLabel, explicitLabels)));
   }
 
   const explicitItems = clicks.map((sel) => {
@@ -169,6 +190,62 @@ async function captureUrl(page, url, idx, cfg, outDir) {
       variants.push(entry);
     } catch (e) {
       variants.push({ label: item.label, selector: item.selector, error: e.message, auto: item.auto || undefined });
+    }
+  }
+
+  // Recursive depth exploration (opt-in, auto-only). BFS over click paths:
+  // after an auto-click, re-discover clickables and queue each as depth+1.
+  // State restore = reload + dismiss + replay path.
+  if (cfg.autoButtons && cfg.maxDepth > 0) {
+    // seed queue with depth-1 paths (each successful flat click becomes a seed)
+    const depthQueue = autoItems.map((it) => [it.label]);
+    while (depthQueue.length) {
+      const pathLabels = depthQueue.shift();
+      if (pathLabels.length > cfg.maxDepth) continue;
+      // restore state: reload → dismiss → replay path
+      try {
+        await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
+        await dismissAll(page, dismiss, cfg.dismissWait);
+        for (const lab of pathLabels) {
+          const loc = page.getByRole('button', { name: lab, exact: true }).first();
+          if (!(await loc.count())) throw new Error(`path step not found: ${lab}`);
+          await loc.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+          await loc.click({ timeout: 3000 });
+          await page.waitForTimeout(cfg.clickWait);
+        }
+      } catch (e) {
+        continue; // path no longer reachable — skip children
+      }
+      // discover newly-revealed buttons, click each one as a leaf
+      const newItems = await discoverAutoButtons(autoSeenHtml, autoSeenLabel, explicitLabels);
+      for (const it of newItems) {
+        vi++;
+        try {
+          const loc = page.getByRole('button', { name: it.label, exact: true }).first();
+          if (!(await loc.count())) { variants.push({ label: it.label, skipped: 'not found', auto: true, depth: pathLabels.length + 1 }); continue; }
+          await loc.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+          await loc.click({ timeout: 3000 });
+          await page.waitForTimeout(cfg.clickWait);
+          const labelSlug = slugify(it.label, '');
+          const hashPart  = labelSlug ? '' : `emoji_${shortHash(it.label)}`;
+          const suffix    = labelSlug || hashPart || `v${vi}`;
+          const pathSlug  = pathLabels.map((l) => slugify(l, '').slice(0, 12)).join('-');
+          const vname = `${String(idx).padStart(3, '0')}_${baseSlug}__v${String(vi).padStart(2, '0')}_d${pathLabels.length + 1}_${pathSlug}__${suffix}.png`;
+          await page.screenshot({ path: path.join(outDir, vname), fullPage: true });
+          variants.push({ label: it.label, screenshot: vname, auto: true, depth: pathLabels.length + 1, path: pathLabels });
+          // queue for deeper exploration; restore from fresh for each child
+          if (pathLabels.length + 1 < cfg.maxDepth) depthQueue.push([...pathLabels, it.label]);
+          // next sibling: restore state again
+          await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
+          await dismissAll(page, dismiss, cfg.dismissWait);
+          for (const lab of pathLabels) {
+            const loc2 = page.getByRole('button', { name: lab, exact: true }).first();
+            if (await loc2.count()) { await loc2.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(cfg.clickWait); }
+          }
+        } catch (e) {
+          variants.push({ label: it.label, error: e.message, auto: true, depth: pathLabels.length + 1, path: pathLabels });
+        }
+      }
     }
   }
 
@@ -241,7 +318,9 @@ async function crawlApp(browser, app) {
   }
 
   fs.mkdirSync(DEFAULTS.outputDir, { recursive: true });
-  const browser = await chromium.launch();
+  // headful if any app (or the env var) asks for it — simpler than relaunching per-app
+  const headful = DEFAULTS.headful || apps.some((a) => a.headful);
+  const browser = await chromium.launch({ headless: !headful });
   const summary = [];
   for (const app of apps) {
     try {
