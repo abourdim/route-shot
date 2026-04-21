@@ -30,14 +30,21 @@ const DEFAULTS = {
   autoButtonsMax: Number(process.env.AUTO_BUTTONS_MAX || 40),
 };
 
-function slugify(s) {
+function slugify(s, fallback = 'item') {
   return (
     String(s)
       .replace(/^https?:\/\//, '')
       .replace(/[^a-zA-Z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
-      .slice(0, 120) || 'item'
+      .slice(0, 120) || fallback
   );
+}
+
+// Short, stable hash for when slugify() empties a label (emoji-only text, etc).
+function shortHash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36).slice(0, 6);
 }
 
 function normalize(href, origin, includeHash) {
@@ -92,18 +99,17 @@ async function captureUrl(page, url, idx, cfg, outDir) {
   const variants = [];
   let vi = 0;
 
-  // auto-discover buttons (opt-in) and add them to the click list as text-based
-  // selectors, deduped against explicit clicks and blocklist.
-  const autoClicks = [];
+  // Build click list: explicit clicks (as selectors) + auto-discovered (as
+  // {label, role-name} objects for exact role-based matching).
+  const autoItems = [];
   if (cfg.autoButtons) {
     const block = new RegExp(cfg.autoButtonsBlocklist, 'i');
-    const explicitTexts = new Set(clicks
-      .map((s) => (s.match(/has-text\(["'](.+?)["']\)/) || [])[1])
+    const explicitLabels = new Set(clicks
+      .map((s) => (s.match(/has-text\(["'](.+?)["']\)/) || s.match(/text-is\(["'](.+?)["']\)/) || [])[1])
       .filter(Boolean));
     const texts = await page.$$eval(cfg.autoButtonsSelector, (els) =>
       els.map((e) => {
         const raw = (e.innerText || e.value || e.getAttribute('aria-label') || '').trim();
-        // collapse whitespace (newlines, multiple spaces) so :has-text() matches DOM text
         return raw.replace(/\s+/g, ' ');
       })
     );
@@ -111,43 +117,58 @@ async function captureUrl(page, url, idx, cfg, outDir) {
     for (const t of texts) {
       if (!t) continue;
       if (block.test(t)) continue;
-      if (explicitTexts.has(t)) continue;
+      if (explicitLabels.has(t)) continue;
       if (seenText.has(t)) continue;
       seenText.add(t);
-      autoClicks.push(`${cfg.autoButtonsSelector.split(',')[0].trim()}:has-text(${JSON.stringify(t)})`);
-      if (autoClicks.length >= cfg.autoButtonsMax) break;
+      autoItems.push({ auto: true, label: t });
+      if (autoItems.length >= cfg.autoButtonsMax) break;
     }
   }
 
-  const allClicks = [...clicks, ...autoClicks];
-  // auto-discovered clicks always run in 'independent' isolation so state
-  // doesn't leak between unrelated buttons.
-  for (let ci = 0; ci < allClicks.length; ci++) {
-    const sel = allClicks[ci];
-    const isAuto = ci >= clicks.length;
-    const effectiveMode = isAuto ? 'independent' : mode;
+  const explicitItems = clicks.map((sel) => {
+    const m = sel.match(/has-text\(["'](.+?)["']\)/) || sel.match(/text-is\(["'](.+?)["']\)/);
+    return { auto: false, selector: sel, label: m ? m[1] : null };
+  });
+  const items = [...explicitItems, ...autoItems];
+
+  for (let ci = 0; ci < items.length; ci++) {
+    const item = items[ci];
+    const effectiveMode = item.auto ? 'independent' : mode;
     vi++;
     if (effectiveMode === 'independent') {
-      // reload + re-dismiss so each click is captured in isolation
       try {
         await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
         await dismissAll(page, dismiss, cfg.dismissWait);
       } catch (e) {
-        variants.push({ selector: sel, error: `reload failed: ${e.message}` });
+        variants.push({ label: item.label, error: `reload failed: ${e.message}` });
         continue;
       }
     }
     try {
-      const el = await page.$(sel);
-      if (!el) { variants.push({ selector: sel, skipped: 'not found' }); continue; }
-      await el.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-      await el.click({ timeout: 3000 });
+      // For auto items use exact role-based match (resolves ambiguity when
+      // multiple elements share text). For explicit, use the raw selector.
+      const locator = item.auto
+        ? page.getByRole('button', { name: item.label, exact: true }).first()
+        : page.locator(item.selector).first();
+      const count = await locator.count();
+      if (!count) { variants.push({ label: item.label, selector: item.selector, skipped: 'not found', auto: item.auto || undefined }); continue; }
+      await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+      await locator.click({ timeout: 3000 });
       await page.waitForTimeout(cfg.clickWait);
-      const vname = `${String(idx).padStart(3, '0')}_${baseSlug}__v${String(vi).padStart(2, '0')}_${slugify(sel)}.png`;
+      const labelSlug = item.label ? slugify(item.label, '') : '';
+      const selSlug   = item.selector ? slugify(item.selector, '').slice(0, 40) : '';
+      // if slugify stripped everything (emoji-only label), append a short hash
+      // of the raw label so each icon gets a unique, readable suffix
+      const hashPart  = item.label && !labelSlug ? `emoji_${shortHash(item.label)}` : '';
+      const suffix    = labelSlug || hashPart || selSlug || `v${vi}`;
+      const vname = `${String(idx).padStart(3, '0')}_${baseSlug}__v${String(vi).padStart(2, '0')}_${suffix}.png`;
       await page.screenshot({ path: path.join(outDir, vname), fullPage: true });
-      variants.push(isAuto ? { selector: sel, screenshot: vname, auto: true } : { selector: sel, screenshot: vname });
+      const entry = { label: item.label, screenshot: vname };
+      if (item.selector) entry.selector = item.selector;
+      if (item.auto) entry.auto = true;
+      variants.push(entry);
     } catch (e) {
-      variants.push({ selector: sel, error: e.message });
+      variants.push({ label: item.label, selector: item.selector, error: e.message, auto: item.auto || undefined });
     }
   }
 
