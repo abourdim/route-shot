@@ -333,7 +333,16 @@ async function crawlApp(browser, app) {
 // Recorder schema: { title, steps: [{ type, url?, selectors?, value?, ... }] }
 // See https://developer.chrome.com/docs/devtools/recorder/reference
 function importRecording(recordingPath, { appName, startUrl } = {}) {
-  const rec = JSON.parse(fs.readFileSync(recordingPath, 'utf8'));
+  const raw = fs.readFileSync(recordingPath, 'utf8');
+  let rec;
+  try { rec = JSON.parse(raw); }
+  catch (e) {
+    const hint = /puppeteer|playwright|require\(|import /i.test(raw.slice(0, 400))
+      ? '\n\nHint: this looks like a Puppeteer/Playwright script export. Re-export from the Recorder panel as "JSON" instead.'
+      : '';
+    console.error(`Failed to parse ${recordingPath} as JSON: ${e.message}${hint}`);
+    process.exit(1);
+  }
   const steps = Array.isArray(rec.steps) ? rec.steps : [];
   const pickSelector = (sels) => {
     if (!Array.isArray(sels) || !sels.length) return null;
