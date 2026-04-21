@@ -1,0 +1,32 @@
+{
+  "apps": [
+    {
+      "name": "bit-playground",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "clickMode": "independent",
+      "clicks": [
+        "button:has-text(\"Sensors\")",
+        "button:has-text(\"Motors\")",
+        "button:has-text(\"GamePad\")",
+        "button:has-text(\"Graph\")",
+        "button:has-text(\"Heart\")",
+        "button:has-text(\"Smile\")",
+        "button:has-text(\"Tick\")",
+        "button:has-text(\"Low beep\")",
+        "button:has-text(\"Beep\")",
+        "button:has-text(\"High beep\")",
+        "button:has-text(\"Melody\")"
+      ]
+    },
+    {
+      "name": "face-quest",
+      "url": "https://abourdim.github.io/face-quest/",
+      "maxPages": 20
+    },
+    {
+      "name": "noor-cast",
+      "url": "https://abourdim.github.io/noor-cast/"
+    }
+  ]
+}

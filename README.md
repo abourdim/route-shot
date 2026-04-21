@@ -102,6 +102,40 @@ CLICK_SELECTORS='button:has-text("Sensors"),button:has-text("Motors"),button:has
 node route-shot.js https://abourdim.github.io/bit-playground/
 ```
 
+## Batch mode (many apps)
+
+Describe every app you want to snapshot in a JSON file, then run:
+
+```bash
+node route-shot.js --batch apps.json
+```
+
+See [apps.example.json](apps.example.json). Each app supports:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `name` | yes | Used for the output subfolder |
+| `url` | yes | Start URL |
+| `dismiss` | no | Selector(s) clicked after each page load (string or array) |
+| `clicks` | no | Selector(s) to capture as variants (string or array) |
+| `clickMode` | no | `sequential` (default — clicks accumulate) or `independent` (reload between each, so each click is captured in isolation) |
+| `maxPages` | no | Per-app override of `MAX_PAGES` |
+
+Output layout:
+
+```
+screenshots/
+├── bit-playground/
+│   ├── 001_..._bit_playground.png
+│   ├── 001_..._bit_playground__v01_button_has_text_Sensors.png
+│   ├── ...
+│   └── index.json
+├── face-quest/
+└── index.json            ← roll-up summary
+```
+
+Use **`clickMode: "independent"`** when each click should be its own isolated case (icon buttons, sound buttons) and **`"sequential"`** for true tab navigation where state accumulates.
+
 ## Output
 
 ```

@@ -84,6 +84,21 @@ cmd_launch() {
     printf "\n"
 }
 
+cmd_batch() {
+    printf "\n${BOLD}Batch run${NC}\n"
+    local default_cfg="$SCRIPT_DIR/apps.json"
+    [ -f "$default_cfg" ] || default_cfg="$SCRIPT_DIR/apps.example.json"
+    read -r -p "  Config file [$default_cfg]: " cfg
+    cfg="${cfg:-$default_cfg}"
+    if [ ! -f "$cfg" ]; then
+        printf "${R}Not found:${NC} %s\n\n" "$cfg"
+        return 1
+    fi
+    cd "$SCRIPT_DIR" || return 1
+    node "$CRAWLER" --batch "$cfg"
+    printf "\n"
+}
+
 cmd_open() {
     if [ ! -d "$OUTPUT_DIR" ]; then
         printf "\n${Y}No screenshots folder yet.${NC}\n\n"
@@ -184,13 +199,14 @@ menu() {
     printf "\n"
     printf "  1) Check install\n"
     printf "  2) Install dependencies\n"
-    printf "  3) Launch route-shot\n"
-    printf "  4) Start web server      (http://localhost:%s)\n" "$SERVER_PORT"
-    printf "  5) Open in browser\n"
-    printf "  6) Stop web server\n"
-    printf "  7) Open screenshots folder\n"
-    printf "  8) Clean screenshots\n"
-    printf "  9) Exit\n"
+    printf "  3) Launch route-shot (single URL)\n"
+    printf "  4) Batch run (apps.json)\n"
+    printf "  5) Start web server      (http://localhost:%s)\n" "$SERVER_PORT"
+    printf "  6) Open in browser\n"
+    printf "  7) Stop web server\n"
+    printf "  8) Open screenshots folder\n"
+    printf "  9) Clean screenshots\n"
+    printf " 10) Exit\n"
     printf "\n"
 }
 
@@ -203,12 +219,13 @@ while true; do
         1) cmd_check ;;
         2) cmd_install ;;
         3) cmd_launch ;;
-        4) cmd_server ;;
-        5) cmd_open_web ;;
-        6) cmd_stop_server ;;
-        7) cmd_open ;;
-        8) cmd_clean ;;
-        9|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
+        4) cmd_batch ;;
+        5) cmd_server ;;
+        6) cmd_open_web ;;
+        7) cmd_stop_server ;;
+        8) cmd_open ;;
+        9) cmd_clean ;;
+        10|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
         *) printf "\n${R}Invalid choice.${NC}\n" ;;
     esac
 done
