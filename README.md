@@ -77,11 +77,19 @@ All options are environment variables — no flags to remember:
 | `MAX_PAGES` | `200` | Safety cap on total pages visited |
 | `NAV_TIMEOUT` | `15000` | ms per page load |
 | `INCLUDE_HASH` | `0` | Set `1` for hash-based routes (`#/about`) |
+| `DISMISS_SELECTOR` | _(none)_ | CSS selector(s) to click after each page load — e.g. a welcome modal or cookie banner. Comma-separated for multiple. Missing selectors are silently skipped. |
+| `DISMISS_WAIT` | `400` | ms to wait after a dismiss click before screenshotting |
 
 Example:
 
 ```bash
 START_URL=https://example.com MAX_PAGES=50 OUTPUT_DIR=./out node route-shot.js
+```
+
+Dismiss a welcome modal before capturing:
+
+```bash
+DISMISS_SELECTOR='button:has-text("Let'"'"'s Go")' node route-shot.js https://example.com
 ```
 
 ## Output

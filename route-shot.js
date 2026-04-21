@@ -22,6 +22,10 @@ const OUTPUT_DIR   = process.env.OUTPUT_DIR || 'screenshots';
 const MAX_PAGES    = Number(process.env.MAX_PAGES || 200);
 const NAV_TIMEOUT  = Number(process.env.NAV_TIMEOUT || 15000);
 const INCLUDE_HASH = process.env.INCLUDE_HASH === '1';
+// Optional CSS selector(s) to click after each navigation (e.g. "Let's Go" button,
+// cookie banner). Comma-separated for multiple selectors, each tried in order.
+const DISMISS_SELECTOR = process.env.DISMISS_SELECTOR || '';
+const DISMISS_WAIT     = Number(process.env.DISMISS_WAIT || 400);
 // ----------------------------------------------------------------------------
 
 function slugify(url) {
@@ -70,6 +74,18 @@ function normalize(href, origin) {
     try {
       const resp   = await page.goto(url, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
       const status = resp ? resp.status() : 0;
+
+      if (DISMISS_SELECTOR) {
+        for (const sel of DISMISS_SELECTOR.split(',').map((s) => s.trim()).filter(Boolean)) {
+          try {
+            const el = await page.$(sel);
+            if (el) {
+              await el.click({ timeout: 1000 });
+              await page.waitForTimeout(DISMISS_WAIT);
+            }
+          } catch { /* ignore — selector not present or not clickable */ }
+        }
+      }
 
       const filename = `${String(idx).padStart(3, '0')}_${slugify(url)}.png`;
       await page.screenshot({
