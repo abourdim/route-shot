@@ -17,3 +17,8 @@ npm-debug.log*
 # runtime
 .server.pid
 .last-url
+
+# user recordings (Recorder exports)
+*.rec.json
+5.js
+
