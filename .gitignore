@@ -22,3 +22,16 @@ npm-debug.log*
 *.rec.json
 5.js
 
+
+# outputs
+screenshots/
+screenshots.*/
+*.json.bak
+
+# recordings
+*.rec.json
+*[0-9].json
+!apps.json
+!apps.example.json
+!package.json
+!package-lock.json
