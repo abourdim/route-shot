@@ -54,6 +54,42 @@
     border-radius: 3px; font-size: 13px; }
   footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border);
     color: var(--mute); font-size: 13px; }
+
+  /* Start-here step cards */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px; margin: 18px 0 8px; }
+  .step { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; position: relative; }
+  .step .num { position: absolute; top: -12px; left: 14px;
+    background: var(--accent); color: #000; font-weight: 700; font-size: 12px;
+    padding: 2px 10px; border-radius: 999px; }
+  .step h4 { margin: 6px 0 6px; color: var(--ink); font-size: 15px; }
+  .step p { margin: 0 0 6px; font-size: 13.5px; }
+  .step code { font-size: 12px; }
+
+  /* Recipe cards — two-column on wide screens */
+  .recipes { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 14px; margin: 14px 0 16px; }
+  .recipe { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; }
+  .recipe h4 { margin: 0 0 8px; color: var(--accent); font-size: 14px;
+    text-transform: uppercase; letter-spacing: 0.3px; }
+  .recipe ol { margin: 0; padding-left: 20px; font-size: 13.5px; }
+  .recipe li { margin-bottom: 4px; }
+  .recipe code { font-size: 12px; white-space: nowrap; }
+
+  /* Dashboard anatomy callouts */
+  .anatomy { background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 18px; margin: 12px 0 18px; }
+  .anatomy dt { color: var(--accent); font-weight: 600; margin-top: 10px; }
+  .anatomy dt:first-child { margin-top: 0; }
+  .anatomy dd { margin: 2px 0 0 0; color: var(--ink); font-size: 14px; }
+  .anatomy dd .mute { font-size: 12.5px; }
+
+  /* key chip — explicit over <kbd> default */
+  .chip { display: inline-block; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 6px; font-size: 12px;
+    font-family: "Cascadia Mono", Consolas, monospace; margin: 0 2px; }
 </style>
 </head>
 <body>
@@ -67,21 +103,223 @@
 <nav class="toc">
   <strong>Contents</strong>
   <ul>
+    <li><a href="#start-here">🚀 Start here</a></li>
+    <li><a href="#dashboard">Dashboard tour</a></li>
+    <li><a href="#recipes">Task recipes</a></li>
     <li><a href="#install">Install</a></li>
-    <li><a href="#quick">Quick start</a></li>
+    <li><a href="#quick">Quick start (CLI)</a></li>
     <li><a href="#menu">Menu</a></li>
     <li><a href="#config">apps.json</a></li>
     <li><a href="#fields">All fields</a></li>
-    <li><a href="#examples">Examples</a></li>
+    <li><a href="#examples">Config examples</a></li>
     <li><a href="#presteps">preSteps</a></li>
     <li><a href="#recorder">Recorder import</a></li>
     <li><a href="#blocklist">Blocklist</a></li>
+    <li><a href="#export">Export (promo / gallery / video)</a></li>
     <li><a href="#output">Output layout</a></li>
     <li><a href="#tips">Tips</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
     <li><a href="#glossary">Glossary</a></li>
   </ul>
 </nav>
+
+<h2 id="start-here">🚀 Start here</h2>
+<p>New to route-shot? Follow these five steps — each one is what you'd do right after the previous.</p>
+
+<div class="steps">
+  <div class="step">
+    <span class="num">1</span>
+    <h4>Install once</h4>
+    <p>Clone the repo and run the installer. Requires <strong>Node 18+</strong>.</p>
+    <pre><code>git clone https://github.com/abourdim/route-shot.git
+cd route-shot
+./menu.sh          <span class="mute"># pick option 2</span></code></pre>
+    <p class="mute">Installs Playwright + Chromium. Takes ~60 s.</p>
+  </div>
+
+  <div class="step">
+    <span class="num">2</span>
+    <h4>Launch the dashboard</h4>
+    <p>The dashboard is the friendliest way to use route-shot — no JSON, no terminal after this.</p>
+    <pre><code>./menu.sh          <span class="mute"># pick option 6</span>
+<span class="mute"># or:</span>
+node src/server.js</code></pre>
+    <p class="mute">Opens <code>http://localhost:8080</code>. If taken, auto-bumps to 8081, 8082…</p>
+  </div>
+
+  <div class="step">
+    <span class="num">3</span>
+    <h4>Pick or edit an app</h4>
+    <p>Use the <strong>App editor</strong> panel (top-right). Choose one of the presets, or click <code>+ New</code> and fill in <em>name</em> + <em>url</em>.</p>
+    <p>Use the <strong>Quick recipes</strong> chips to apply a proven config in one click: <em>Only main page</em>, <em>Dismiss common modals</em>, <em>Auto-snap every button</em>, …</p>
+    <p class="mute">The sticky header shows which app you're editing so you never lose track.</p>
+  </div>
+
+  <div class="step">
+    <span class="num">4</span>
+    <h4>Capture</h4>
+    <p>Hit <strong>Run batch (apps.json)</strong> — the status pill turns amber and logs stream.</p>
+    <p>Or try <strong>Manual Snapshot Session</strong>: opens a headful Chromium; a 📸 widget injects into the page. Drive by hand, snap on demand. Hotkey: <span class="chip">Ctrl+Shift+S</span>.</p>
+    <p>Not sure which buttons to click? <strong>Scan URL</strong> lists every clickable element on the page so you can pick the ones you want.</p>
+  </div>
+
+  <div class="step">
+    <span class="num">5</span>
+    <h4>Review and export</h4>
+    <p>Screenshots appear right below Run. Click any thumbnail for a lightbox.</p>
+    <p>Then in the <strong>Export</strong> section, pick a tab:</p>
+    <ul style="margin:4px 0 0 16px; padding:0; font-size:13.5px;">
+      <li>🖼️ <strong>Promo PNG</strong> — social-media card (Twitter, IG, YouTube, …)</li>
+      <li>📄 <strong>Gallery + PDF</strong> — self-contained HTML handout</li>
+      <li>🎬 <strong>Slideshow video</strong> — MP4 with optional music + fades</li>
+    </ul>
+  </div>
+</div>
+
+<div class="tip">That's it. Come back to this guide for the dashboard tour, field reference, or when something surprises you.</div>
+
+<h2 id="dashboard">Dashboard tour</h2>
+<p>The dashboard is a single page served by <code>node src/server.js</code>. Six panels, top-down:</p>
+
+<dl class="anatomy">
+  <dt>Sticky header</dt>
+  <dd>Stays pinned while you scroll. Shows <em>editing: &lt;app-name&gt; → &lt;url&gt;</em> so you always know which apps.json entry is active. A pill on the right reports status: <span class="mute">gray "idle" · amber "running — batch" · green post-run with last exit code.</span></dd>
+
+  <dt>RUN panel</dt>
+  <dd>Single-URL crawler, plus <em>Run batch (apps.json)</em> / <em>Dry run</em> / <em>Stop</em> / <em>Clean screenshots</em> (destructive, pushed to the right) / <em>Open folder</em>. Live logs stream into the console area.</dd>
+
+  <dt>APP EDITOR</dt>
+  <dd>Form-based apps.json editor. Accordions for <em>Essentials</em>, <em>Page &amp; navigation</em>, <em>Auto-discover buttons</em>, <em>Setup steps (preSteps)</em>, <em>Explicit clicks</em>, <em>Timing &amp; debug</em>, plus a <em>Raw JSON &amp; presets</em> section for power users. Each accordion has a badge showing current state.<br><span class="mute">Save to apps.json · Save as preset · Dry run this app. Uploads and imports from DevTools Recorder live here too.</span></dd>
+
+  <dt>Screenshots</dt>
+  <dd>Grid of every file under <code>screenshots/</code>. Click any thumbnail for the lightbox (scrollable full-res, open-in-tab, delete). Top strip summarizes each <code>index.json</code> (page count · ok · skipped · errors), with <em>View JSON</em> for the raw schema.</dd>
+
+  <dt>MANUAL SNAPSHOT SESSION</dt>
+  <dd>Opens a headful Chromium you drive by hand. A draggable 📸 widget injects into the page; hit <span class="chip">Ctrl+Shift+S</span> or the widget to snap. Great for hardware pairing, login flows, anything too tricky to automate.</dd>
+
+  <dt>SCAN URL → PICK BUTTONS</dt>
+  <dd>Takes a URL, opens it in a background Chromium, returns every <code>button</code> / <code>[role=button]</code> / <code>input[type=button]</code> / <code>input[type=submit]</code>. Click-to-copy cells for label, id, and selector. Filter box + <em>Add to clicks</em> / <em>Add to blocklist</em> buttons pipe straight into the app editor.</dd>
+
+  <dt>EXPORT</dt>
+  <dd>Three tabs: Promo PNG (a framed social card), Gallery + PDF (self-contained HTML handout + optional printed PDF), and Slideshow video (reels/feeds with optional audio). See <a href="#export">the export section</a> for details.</dd>
+</dl>
+
+<h2 id="recipes">Task recipes</h2>
+<p>Pick the card that matches what you want. Each has the exact steps.</p>
+
+<div class="recipes">
+
+  <div class="recipe">
+    <h4>📸 One screenshot of a page</h4>
+    <ol>
+      <li>Open the dashboard.</li>
+      <li>In <em>App editor</em>, click <strong>+ New</strong>, fill <em>name</em> + <em>url</em>.</li>
+      <li>Click <strong>Only main page</strong> recipe (sets <code>maxPages: 1</code>).</li>
+      <li><strong>Save to apps.json</strong> → <strong>Run batch</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="recipe">
+    <h4>🔘 Every button auto-snapped</h4>
+    <ol>
+      <li><strong>Only main page</strong>, then <strong>Auto-snap every button</strong>.</li>
+      <li>If the page opens with a modal, set <em>Dismiss selector</em> (e.g. <code>button:has-text("Let's Go")</code>).</li>
+      <li>Tune <em>autoButtonsBlocklist</em> if some buttons shouldn't be clicked.</li>
+      <li>Run batch. Variants appear as <code>..._v02_&lt;label&gt;.png</code>.</li>
+    </ol>
+  </div>
+
+  <div class="recipe">
+    <h4>🔐 App behind login</h4>
+    <ol>
+      <li>Use the <strong>Setup steps (preSteps)</strong> accordion.</li>
+      <li>Add <code>fill</code> for email + password, <code>click</code> the sign-in button, then <code>waitForURL</code> the post-login route.</li>
+      <li>Session cookies persist for the whole crawl.</li>
+    </ol>
+    <p class="mute" style="font-size:12px; margin-top:6px;">Alternatively record the flow in Chrome DevTools Recorder and import the JSON (<a href="#recorder">§ Recorder import</a>).</p>
+  </div>
+
+  <div class="recipe">
+    <h4>📑 SPA tabs (one screenshot per tab)</h4>
+    <ol>
+      <li>Run <strong>Scan URL</strong> on the page.</li>
+      <li>In the results, click the ID cells for each tab to copy. Paste into <em>Explicit clicks</em>.</li>
+      <li>Set <em>clickMode: independent</em> (reloads between each) — so every screenshot is a fresh tab.</li>
+    </ol>
+  </div>
+
+  <div class="recipe">
+    <h4>🎬 Social media video</h4>
+    <ol>
+      <li>Scroll to <strong>Export → 🎬 Slideshow video</strong>.</li>
+      <li>Pick format (<em>Reel / Feed / YouTube / Square</em>) and a style (32 effects across Clean, Tech, Space, Retro).</li>
+      <li>Click shot thumbnails to include, or leave empty for all.</li>
+      <li>Optional: pick an audio track, set volume + fade. Watch the live pre-flight read back what's about to render.</li>
+      <li><strong>Render video</strong>. ffmpeg muxes audio into mp4.</li>
+    </ol>
+  </div>
+
+  <div class="recipe">
+    <h4>🆚 Compare 3–5 video styles</h4>
+    <ol>
+      <li>Same shots — but pick multiple cards in the <em>Test modes</em> grid.</li>
+      <li><strong>Render batch</strong>. Writes one mp4 per style into a timestamped run folder.</li>
+      <li>A <code>compare.html</code> is generated automatically so you can preview them side-by-side.</li>
+    </ol>
+  </div>
+
+  <div class="recipe">
+    <h4>🖐️ Drive by hand (hardware pairing, etc.)</h4>
+    <ol>
+      <li>In <strong>Manual Snapshot Session</strong>, set URL + app name.</li>
+      <li>Click <strong>Start session</strong> — a headful Chromium opens with a 📸 widget.</li>
+      <li>Drive the page manually. Snap with <span class="chip">Ctrl+Shift+S</span> or the widget.</li>
+      <li>Filenames include your <em>label</em>. Session state (label) persists across reloads.</li>
+    </ol>
+  </div>
+
+  <div class="recipe">
+    <h4>📤 Share a single promo</h4>
+    <ol>
+      <li>Pick a screenshot in <strong>Export → 🖼️ Promo PNG</strong>.</li>
+      <li>Choose size (Twitter, IG, YouTube, Product Hunt, …), frame (browser / laptop / phone / none).</li>
+      <li>Title + tagline + CTA + accent color → <strong>Render PNG</strong>.</li>
+    </ol>
+  </div>
+
+</div>
+
+<h2 id="export">Export (promo / gallery / video)</h2>
+<p>Three share-ready outputs, each in its own tab. All write into a <code>videos/</code> or <code>galleries/</code> run folder stamped with the date.</p>
+
+<h3>🖼️ Promo PNG</h3>
+<table>
+  <tr><th>Field</th><th>Options</th></tr>
+  <tr><td>Size</td><td>Twitter 1200×675 · IG square 1080×1080 · IG/TikTok story 1080×1920 · YouTube 1280×720 · OG 1200×630 · Product Hunt 1270×760</td></tr>
+  <tr><td>Frame</td><td>browser chrome · laptop · phone · no frame</td></tr>
+  <tr><td>Content</td><td>title · tagline · CTA · accent colour · dark/light theme</td></tr>
+</table>
+
+<h3>📄 Gallery + PDF</h3>
+<p>Pick an app folder → produces <code>galleries/&lt;app&gt;_&lt;ts&gt;/gallery.html</code>. All images are inlined as data URIs, so the file is self-contained (one HTML you can email). <strong>Export PDF</strong> routes it through Chromium print-to-PDF for a paginated handout.</p>
+
+<h3>🎬 Slideshow video</h3>
+<table>
+  <tr><th>Field</th><th>Notes</th></tr>
+  <tr><td>Format</td><td>Reel 1080×1920 · Square 1080×1080 · Feed 1920×1080 · YouTube 1920×1080</td></tr>
+  <tr><td>Style</td><td>32 visual effects: Clean · Tech/Dev · Space/Science · Retro/Art</td></tr>
+  <tr><td>Frame ms</td><td>How long each shot stays on screen (default 2500 ms)</td></tr>
+  <tr><td>Watermark</td><td>Small overlay text, bottom-right</td></tr>
+  <tr><td>Audio</td><td>Drop MP3s into <code>audio/library/</code>, pick from dropdown. Or paste an MP3/WAV URL (downloaded and cached). Volume + fade-in/out in ms.</td></tr>
+  <tr><td>Pick shots</td><td>Click thumbnails in the chip grid. Selected chips show a blue border + ✓. Leave empty to include all shots in the app folder.</td></tr>
+  <tr><td>Test modes (batch)</td><td>Select multiple style cards → <em>Render batch</em> writes one mp4 per style + a <code>compare.html</code> side-by-side.</td></tr>
+</table>
+
+<p>Above the Render button, a live <strong>pre-flight summary</strong> reads back the exact parameters:</p>
+<pre><code>▶ 7 shots · hacker · 2500 ms/frame · ~17.5s · Reel / Story 1080×1920 · 🎵 test-tone.mp3 · wm:"@mylab"</code></pre>
+
+<div class="tip">ffmpeg is optional but recommended. Without it you get a <code>.webm</code>; with it you get a muxed <code>.mp4</code> (and a <code>.webm</code> sibling). Install it once, put it on PATH, refresh the dashboard.</div>
+
 
 <h2 id="install">Install</h2>
 <pre><code>git clone https://github.com/abourdim/route-shot.git
