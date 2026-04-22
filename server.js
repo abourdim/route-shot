@@ -16,6 +16,7 @@ const APPS_CFG = path.join(ROOT, 'apps.json');
 const SHOTS    = path.join(ROOT, 'screenshots');
 const HISTORY  = path.join(ROOT, '.history.json');
 const HISTORY_CAP = 50;
+const PRESETS_DIR = path.join(ROOT, 'presets');
 
 function loadHistory() {
   try { return JSON.parse(fs.readFileSync(HISTORY, 'utf8')); }
@@ -209,6 +210,39 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/apps' && req.method === 'GET') {
       if (!fs.existsSync(APPS_CFG)) return json(res, 200, { apps: [] });
       return json(res, 200, JSON.parse(fs.readFileSync(APPS_CFG, 'utf8')));
+    }
+
+    // API: presets list + CRUD
+    if (pathname === '/api/presets' && req.method === 'GET') {
+      if (!fs.existsSync(PRESETS_DIR)) return json(res, 200, { presets: [] });
+      const names = fs.readdirSync(PRESETS_DIR)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => f.replace(/\.json$/, ''))
+        .sort();
+      return json(res, 200, { presets: names });
+    }
+    if (pathname.startsWith('/api/presets/') && req.method === 'GET') {
+      const name = decodeURIComponent(pathname.slice('/api/presets/'.length));
+      if (!/^[\w.-]+$/.test(name)) return json(res, 400, { error: 'bad name' });
+      const p = path.join(PRESETS_DIR, name + '.json');
+      if (!fs.existsSync(p)) return json(res, 404, { error: 'not found' });
+      return json(res, 200, JSON.parse(fs.readFileSync(p, 'utf8')));
+    }
+    if (pathname.startsWith('/api/presets/') && req.method === 'POST') {
+      const name = decodeURIComponent(pathname.slice('/api/presets/'.length));
+      if (!/^[\w.-]+$/.test(name)) return json(res, 400, { error: 'bad name (letters, digits, _ . - only)' });
+      const body = await readBody(req);
+      if (!body || !Array.isArray(body.apps)) return json(res, 400, { error: 'expected { apps: [...] }' });
+      fs.mkdirSync(PRESETS_DIR, { recursive: true });
+      fs.writeFileSync(path.join(PRESETS_DIR, name + '.json'), JSON.stringify(body, null, 2) + '\n');
+      return json(res, 200, { ok: true });
+    }
+    if (pathname.startsWith('/api/presets/') && req.method === 'DELETE') {
+      const name = decodeURIComponent(pathname.slice('/api/presets/'.length));
+      if (!/^[\w.-]+$/.test(name)) return json(res, 400, { error: 'bad name' });
+      const p = path.join(PRESETS_DIR, name + '.json');
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+      return json(res, 200, { ok: true });
     }
 
     // API: write apps.json

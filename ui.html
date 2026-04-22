@@ -147,6 +147,12 @@
 
   <section class="panel">
     <h2>apps.json</h2>
+    <div class="row" style="margin-bottom: 6px;">
+      <select id="presetSelect" style="flex: 1;"></select>
+      <button id="presetLoad">Load preset</button>
+      <button id="presetSave">Save current as preset…</button>
+      <button id="presetDel" class="danger" title="Delete selected preset">✕</button>
+    </div>
     <textarea id="appsEditor" spellcheck="false"></textarea>
     <div class="row">
       <button id="saveApps" class="primary">Save</button>
@@ -645,9 +651,55 @@ $('runSingle').onclick = async (...a) => { const r = await origRunSingle(...a); 
 const origScanBtn = $('scanBtn').onclick;
 $('scanBtn').onclick = async (...a) => { const r = await origScanBtn(...a); setTimeout(loadHistory, 300); return r; };
 
+// --- presets ----------------------------------------------------------------
+async function loadPresets() {
+  try {
+    const r = await fetchJSON('/api/presets');
+    const sel = $('presetSelect');
+    sel.innerHTML = (r.presets || []).map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+    if (!r.presets.length) sel.innerHTML = '<option value="">(no presets yet)</option>';
+  } catch (e) {}
+}
+
+$('presetLoad').onclick = async () => {
+  const name = $('presetSelect').value;
+  if (!name) return;
+  const r = await fetchJSON('/api/presets/' + encodeURIComponent(name));
+  if (r.error) { alert(r.error); return; }
+  $('appsEditor').value = JSON.stringify(r, null, 2);
+  markDirty();
+  $('saveHint').textContent = `loaded preset "${name}" (remember to Save)`;
+};
+
+$('presetSave').onclick = async () => {
+  let body;
+  try { body = JSON.parse($('appsEditor').value); }
+  catch (e) { alert('Current editor content is not valid JSON: ' + e.message); return; }
+  const name = prompt('Preset name (letters, digits, _ . - only):', 'my-preset');
+  if (!name) return;
+  if (!/^[\w.-]+$/.test(name)) { alert('Bad name'); return; }
+  const r = await fetchJSON('/api/presets/' + encodeURIComponent(name), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (r.error) { alert(r.error); return; }
+  await loadPresets();
+  $('presetSelect').value = name;
+  $('saveHint').textContent = `saved preset "${name}"`;
+};
+
+$('presetDel').onclick = async () => {
+  const name = $('presetSelect').value;
+  if (!name) return;
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  await fetch('/api/presets/' + encodeURIComponent(name), { method: 'DELETE' });
+  await loadPresets();
+};
+
 loadApps();
 loadGallery();
 loadHistory();
+loadPresets();
 </script>
 
 </body>

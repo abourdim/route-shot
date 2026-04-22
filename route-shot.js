@@ -455,6 +455,14 @@ function importRecording(recordingPath, { appName, startUrl, asClicks = false } 
     return;
   }
 
+  // Shortcut: --preset <name> is sugar for --batch presets/<name>.json
+  const presetIdx = args.indexOf('--preset');
+  if (presetIdx !== -1) {
+    const name = args[presetIdx + 1];
+    if (!name) { console.error('--preset requires a name'); process.exit(1); }
+    args.splice(presetIdx, 2, '--batch', path.join('presets', `${name}.json`));
+  }
+
   const batchIdx = args.indexOf('--batch');
   const isBatch  = batchIdx !== -1;
 

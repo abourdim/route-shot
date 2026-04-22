@@ -1,0 +1,15 @@
+{
+  "apps": [
+    {
+      "name": "app-behind-login",
+      "url": "https://app.example.com",
+      "preSteps": [
+        { "action": "fill",  "selector": "input[name=email]",    "value": "demo@example.com" },
+        { "action": "fill",  "selector": "input[name=password]", "value": "hunter2" },
+        { "action": "click", "selector": "button:has-text(\"Sign in\")" },
+        { "action": "waitForURL", "value": "**/dashboard" }
+      ],
+      "autoButtons": true
+    }
+  ]
+}

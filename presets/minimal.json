@@ -1,0 +1,9 @@
+{
+  "apps": [
+    {
+      "name": "my-app",
+      "url": "https://example.com",
+      "autoButtons": true
+    }
+  ]
+}
