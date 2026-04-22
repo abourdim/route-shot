@@ -90,6 +90,38 @@
   .chip { display: inline-block; background: var(--panel); border: 1px solid var(--border);
     border-radius: 4px; padding: 1px 6px; font-size: 12px;
     font-family: "Cascadia Mono", Consolas, monospace; margin: 0 2px; }
+
+  /* decision tree / flow diagrams */
+  .ascii { background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px; color: var(--ink);
+    font: 12.5px/1.55 "Cascadia Mono", Consolas, monospace;
+    white-space: pre; overflow-x: auto; margin: 12px 0 18px; }
+
+  /* comparison grid */
+  .compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px; margin: 12px 0 18px; }
+  .compare > div { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; }
+  .compare h4 { margin: 0 0 6px; color: var(--accent); font-size: 14px; }
+  .compare ul { margin: 0; padding-left: 18px; font-size: 13.5px; }
+
+  /* FAQ — Q/A pairs */
+  details.faq { border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 14px; margin: 8px 0; background: var(--panel); }
+  details.faq summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+  details.faq[open] summary { color: var(--accent); margin-bottom: 8px; }
+  details.faq p:last-child { margin-bottom: 0; }
+
+  /* changelog */
+  .changelog { border-left: 3px solid var(--accent); padding: 8px 14px;
+    margin: 12px 0; background: var(--code-bg); border-radius: 0 6px 6px 0; }
+  .changelog h4 { margin: 0 0 6px; color: var(--accent); font-size: 14px; }
+  .changelog ul { margin: 0; padding-left: 18px; font-size: 13.5px; }
+
+  /* label tag for section heads */
+  .tag-new { display: inline-block; vertical-align: middle; background: var(--good);
+    color: #000; font-size: 10px; font-weight: 700; padding: 1px 6px;
+    border-radius: 3px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
 </style>
 </head>
 <body>
@@ -103,9 +135,13 @@
 <nav class="toc">
   <strong>Contents</strong>
   <ul>
+    <li><a href="#whats-new">✨ What's new in v0.7.0</a></li>
     <li><a href="#start-here">🚀 Start here</a></li>
+    <li><a href="#architecture">How route-shot works</a></li>
+    <li><a href="#decide">Which click mode?</a></li>
     <li><a href="#dashboard">Dashboard tour</a></li>
     <li><a href="#recipes">Task recipes</a></li>
+    <li><a href="#shortcuts">Keyboard shortcuts</a></li>
     <li><a href="#install">Install</a></li>
     <li><a href="#quick">Quick start (CLI)</a></li>
     <li><a href="#menu">Menu</a></li>
@@ -126,11 +162,132 @@
     <li><a href="#styles">32 video styles</a></li>
     <li><a href="#export">Export panel</a></li>
     <li><a href="#output">Output layout</a></li>
+    <li><a href="#perf">Performance</a></li>
+    <li><a href="#security">Security &amp; privacy</a></li>
+    <li><a href="#faq">FAQ</a></li>
     <li><a href="#tips">Tips &amp; gotchas</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
     <li><a href="#glossary">Glossary</a></li>
   </ul>
 </nav>
+
+<h2 id="whats-new">✨ What's new in v0.7.0</h2>
+
+<div class="changelog">
+  <h4>v0.7.0 — social-ready</h4>
+  <ul>
+    <li>🎬 Slideshow video export — 32 styles across Clean / Tech / Space / Retro</li>
+    <li>🎵 Optional audio track with volume + fade-in/out (library, upload, cached URL)</li>
+    <li>🆚 Batch render mode — one mp4 per style + auto <code>compare.html</code></li>
+    <li>📁 Timestamped run folders under <code>videos/</code> and <code>galleries/</code></li>
+    <li>🖼️ Promo PNG for Twitter, IG, YouTube, Product Hunt, Open Graph</li>
+    <li>📄 Self-contained gallery HTML + paginated PDF export</li>
+    <li>📸 Manual snapshot session with 📸 widget + <span class="chip">Ctrl+Shift+S</span> hotkey</li>
+    <li>🔍 Scan URL → pick-to-clicks / pick-to-blocklist</li>
+    <li>🎨 Dashboard polish — thumbnail chip picker for shots, card picker for modes, live pre-flight summary, sticky status, app breadcrumb</li>
+  </ul>
+</div>
+
+<h2 id="architecture">How route-shot works <span class="tag-new">intro</span></h2>
+
+<p>Three pieces, all Node. All communicate via the filesystem and a local HTTP server.</p>
+
+<div class="ascii">
+     ┌──────────────────────────────────────────────────────────────┐
+     │  menu.sh  (bash launcher — install, run, open dashboard)     │
+     └──────────┬──────────────────────────────────┬────────────────┘
+                │ spawns                           │ spawns
+       ┌────────▼──────────┐              ┌────────▼────────────┐
+       │ src/route-shot.js │              │    src/server.js    │
+       │  CLI crawler      │              │   HTTP dashboard    │
+       │  + Playwright     │              │   (zero deps)       │
+       └───────┬───────────┘              └─────┬───────────┬───┘
+               │ writes                         │ serves    │ spawns
+               ▼                                ▼           ▼
+     ┌──────────────────────┐          ┌────────────────┐  ┌──────────┐
+     │  screenshots/&lt;app&gt;/  │◄────────►│  web/ui.html   │  │ ffmpeg   │
+     │  + index.json        │          │  web/slideshow │  │ (mp4 mux)│
+     └──────────┬───────────┘          │  web/promo     │  └──────────┘
+                │ read by                └────────────────┘
+                ▼
+     ┌──────────────────────┐
+     │ videos/&lt;run&gt;/*.mp4   │
+     │ galleries/&lt;run&gt;/*.html │
+     └──────────────────────┘
+</div>
+
+<h3>Data flow</h3>
+<ol>
+  <li><strong>Configure</strong> — apps.json (file-based) or the dashboard form (which writes to apps.json via <code>/api/apps</code>).</li>
+  <li><strong>Crawl</strong> — <code>route-shot.js</code> launches Playwright Chromium, BFS-walks same-origin links, runs <code>preSteps</code> + <code>dismiss</code> + <code>clicks</code> + <code>autoButtons</code> per page, saves <code>.png</code> + <code>index.json</code>.</li>
+  <li><strong>Render</strong> — <code>server.js</code> opens <code>slideshow.html</code> / <code>promo.html</code> in Playwright's <code>recordVideo</code> context (webm), then hands off to <code>ffmpeg</code> for mp4 muxing + audio overlay.</li>
+</ol>
+
+<h2 id="decide">Which click mode should I use? <span class="tag-new">decision tree</span></h2>
+
+<p>route-shot has three overlapping ways to interact with a page: <code>preSteps</code>, <code>clicks</code>, <code>autoButtons</code>. Pick by intent:</p>
+
+<div class="ascii">
+  What do you want to capture?
+  │
+  ├─ Just the landing page, no interaction ─────────────► maxPages:1, nothing else
+  │
+  ├─ Same URL, several UI states
+  │  │
+  │  ├─ I know the exact buttons
+  │  │  │
+  │  │  ├─ Tab-like (state should persist) ───────────► clicks + clickMode:sequential
+  │  │  └─ Each click independent of the others ───────► clicks + clickMode:independent
+  │  │
+  │  └─ I don't — just click everything reasonable ───► autoButtons:true + blocklist
+  │
+  ├─ A whole site (many URLs) ──────────────────────────► default BFS (no clicks needed)
+  │
+  └─ Setup first, then capture
+     │
+     ├─ Setup is "one-shot" (login, toggle) ──────────► preSteps[]
+     └─ Setup + then click each tab ──────────────────► preSteps[] + clicks[]
+</div>
+
+<div class="compare">
+  <div>
+    <h4>clicks[]</h4>
+    <ul>
+      <li>Explicit, deterministic list</li>
+      <li>Survives across runs</li>
+      <li>You own the selectors</li>
+      <li>Best for tab-navigation snapshots</li>
+    </ul>
+  </div>
+  <div>
+    <h4>autoButtons:true</h4>
+    <ul>
+      <li>Zero-config discovery</li>
+      <li>Blocklist keeps destructive actions safe</li>
+      <li>Can produce near-duplicates</li>
+      <li>Best for initial surveys</li>
+    </ul>
+  </div>
+  <div>
+    <h4>preSteps[]</h4>
+    <ul>
+      <li>Ran <em>before</em> screenshots</li>
+      <li>Runs once per independent reload</li>
+      <li>Chains fill → click → wait</li>
+      <li>Best for login / onboarding gates</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="shortcuts">Keyboard shortcuts</h2>
+<table>
+  <tr><th>Where</th><th>Keys</th><th>Action</th></tr>
+  <tr><td>Page under Manual Session</td><td><span class="chip">Ctrl+Shift+S</span></td><td>Snap a screenshot (same as the 📸 widget)</td></tr>
+  <tr><td>Lightbox (screenshot viewer)</td><td><span class="chip">←</span> <span class="chip">→</span></td><td>Navigate prev / next screenshot</td></tr>
+  <tr><td>Lightbox</td><td><span class="chip">Esc</span></td><td>Close</td></tr>
+  <tr><td>Lightbox</td><td><span class="chip">f</span></td><td>Toggle fit-to-width</td></tr>
+  <tr><td>Anywhere in dashboard</td><td>Scan-results row click</td><td>Copy label / id / selector (depending on cell)</td></tr>
+</table>
 
 <h2 id="start-here">🚀 Start here</h2>
 <p>New to route-shot? Follow these five steps — each one is what you'd do right after the previous.</p>
@@ -862,6 +1019,92 @@ node route-shot.js --import-recording flow.json --as-clicks --merge apps.json</c
     }
   ]
 }</code></pre>
+
+<h2 id="perf">Performance — what's fast, what isn't</h2>
+<p>Rough timings on a 2024 desktop with Chromium + local fibre (your mileage varies).</p>
+<table>
+  <tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+  <tr><td>One page, one screenshot</td><td>~2–4 s</td><td>Playwright cold-start + goto + screenshot</td></tr>
+  <tr><td>BFS of a small site (10 pages)</td><td>~20–40 s</td><td>Cold-start paid once</td></tr>
+  <tr><td>autoButtons, sequential, 20 buttons</td><td>+10–15 s</td><td>No reload between clicks</td></tr>
+  <tr><td>autoButtons, <strong>independent</strong>, 20 buttons</td><td>+40–80 s</td><td>Full reload per click</td></tr>
+  <tr><td>Dry-run (plan only)</td><td>&lt; 1 s per app</td><td>No browser, just config validation</td></tr>
+  <tr><td>Slideshow video, 10 shots @ 2.5 s/frame</td><td>~30–60 s</td><td>Playwright records 25 s webm, ffmpeg re-encodes to mp4 in &lt;10 s</td></tr>
+  <tr><td>Batch render, 5 styles, 10 shots</td><td>~3–5 min</td><td>Sequentially renders each style</td></tr>
+  <tr><td>Gallery HTML</td><td>~1 s</td><td>Inlines images as data URIs — output size ≈ sum of pngs</td></tr>
+  <tr><td>Gallery → PDF</td><td>+~5 s</td><td>Routed through Playwright print-to-PDF</td></tr>
+</table>
+
+<h3>Ways to speed things up</h3>
+<ul>
+  <li><strong>Prefer <code>clickMode: sequential</code></strong> — 5–10× faster than independent. Use independent only when state truly leaks.</li>
+  <li><strong>Lower <code>autoButtonsMax</code></strong> — default is 40 per page. Cap at 10 for a quick sweep.</li>
+  <li><strong>Tighten <code>maxPages</code></strong> — don't crawl a whole blog if you only want the product pages.</li>
+  <li><strong>Batch your video styles offline</strong> — queue with <em>Render batch</em>, walk away.</li>
+  <li><strong>Reuse the dashboard</strong> — Chromium launch is the expensive step; the 2nd run is noticeably faster.</li>
+</ul>
+
+<h2 id="security">Security & privacy</h2>
+
+<h3>What leaves your machine</h3>
+<p>Essentially nothing. route-shot is local-first:</p>
+<ul>
+  <li>Screenshots stay on disk under <code>screenshots/</code>.</li>
+  <li>The dashboard binds to <code>localhost</code> by default.</li>
+  <li>No telemetry, no update checks, no analytics.</li>
+  <li>Audio URLs pasted into the video export <em>are</em> fetched (once, cached into <code>audio/cache/</code>).</li>
+  <li>When crawling, Playwright fetches the target site normally — same data flow as opening it in Chrome.</li>
+</ul>
+
+<div class="bad"><strong>Don't point <code>autoButtons</code> at production with real data.</strong> Even with a blocklist, a mis-labelled button could trigger a "Delete account" action. Use staging. Seriously.</div>
+
+<h3>The dashboard has no auth</h3>
+<p>Any process on <code>localhost</code> can POST to <code>/api/run/batch</code>, <code>/api/export/video</code>, or <code>/api/apps</code>. Fine for a single-user dev machine. If you expose the port (port-forward, tunnelling tool), put a reverse-proxy with basic auth in front — don't bind directly.</p>
+
+<h3><code>ROUTE_SHOT_ALLOW_EVAL</code></h3>
+<p>The <code>evaluate</code> preStep runs arbitrary JS in the target page. Only honored when the env var is set to <code>1</code>. Leave it off unless you control every apps.json entry.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<details class="faq"><summary>Do I need to know JavaScript?</summary>
+<p>No — the dashboard is form-driven. You'll touch JSON if you import a DevTools Recorder file or power-edit in the Raw JSON section, but that's it.</p>
+</details>
+
+<details class="faq"><summary>How is this different from just screenshotting the site?</summary>
+<p>A single screenshot captures one state of one page. route-shot BFS-crawls the whole site, captures every page, and optionally one screenshot per clickable button. That scales to "show me every state of every page" without writing a test.</p>
+</details>
+
+<details class="faq"><summary>Why Chromium and not Firefox/WebKit?</summary>
+<p>Playwright supports all three. Chromium is hard-coded here because the recordVideo codec + ffmpeg pipeline is simplest in Chromium. The crawler itself would work on any browser.</p>
+</details>
+
+<details class="faq"><summary>Can I screenshot an Electron / Tauri app?</summary>
+<p>Not directly — route-shot drives Chromium against a URL. If the Electron app exposes a devtools port, you can crawl that. For desktop apps, the Manual Snapshot Session + OS screenshot tools are closer.</p>
+</details>
+
+<details class="faq"><summary>What's the difference between <code>dismiss</code> and <code>preSteps</code>?</summary>
+<p><code>dismiss</code> runs <em>every</em> page load (including after independent reloads) — designed for modals that pop up on arrival. <code>preSteps</code> runs only at the start of the app + on independent reloads that need the setup state restored. Use <code>dismiss</code> for "always close this modal" and <code>preSteps</code> for "log in and click expert mode before starting".</p>
+</details>
+
+<details class="faq"><summary>Do I need ffmpeg?</summary>
+<p>For video export only. If it's on PATH, you get an mp4 (with audio if supplied). Without it you get a <code>.webm</code> from Playwright's recordVideo. Promo PNG + Gallery HTML + PDF don't need it.</p>
+</details>
+
+<details class="faq"><summary>Can I crawl multi-origin apps?</summary>
+<p>BFS is restricted to the same origin as the start URL. For multi-origin flows, list them as separate apps in apps.json.</p>
+</details>
+
+<details class="faq"><summary>What happens if a page 404s?</summary>
+<p>Still screenshot-captured, but <code>status: 404</code> is recorded in <code>index.json</code>. <code>status: 0</code> means network failure (DNS, connection reset, timeout).</p>
+</details>
+
+<details class="faq"><summary>How do I share a gallery with someone?</summary>
+<p><em>Export → Gallery + PDF</em>. The resulting <code>gallery.html</code> is fully self-contained (images are data-URI inlined). Email the file, attach to Slack, host anywhere — no dependencies.</p>
+</details>
+
+<details class="faq"><summary>Where do the video styles come from?</summary>
+<p>They're CSS + JS animations defined in <code>web/slideshow.html</code>. Playwright opens that page with your shots as config, records it playing, ffmpeg transcodes. To add a style, drop CSS into the slideshow and register it in the styles list.</p>
+</details>
 
 <h2 id="tips">Tips & gotchas</h2>
 
