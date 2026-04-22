@@ -21,6 +21,41 @@ BOLD=$'\033[1m'; NC=$'\033[0m'
 
 # --- helpers ----------------------------------------------------------------
 
+# Open a URL in Chrome if installed (Windows/macOS/Linux), otherwise fall
+# back to the OS default browser. Override with $ROUTE_SHOT_BROWSER (path to
+# any browser executable).
+open_url() {
+    local url="$1"
+    if [ -n "$ROUTE_SHOT_BROWSER" ] && [ -x "$ROUTE_SHOT_BROWSER" ]; then
+        "$ROUTE_SHOT_BROWSER" "$url" >/dev/null 2>&1 &
+        return
+    fi
+    # Windows Chrome
+    for p in "/c/Program Files/Google/Chrome/Application/chrome.exe" \
+             "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
+             "$LOCALAPPDATA/Google/Chrome/Application/chrome.exe"; do
+        if [ -f "$p" ]; then "$p" "$url" >/dev/null 2>&1 & return; fi
+    done
+    # macOS Chrome
+    if [ -d "/Applications/Google Chrome.app" ]; then
+        open -a "Google Chrome" "$url"; return
+    fi
+    # Linux Chrome
+    for cmd in google-chrome google-chrome-stable chrome chromium chromium-browser; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            "$cmd" "$url" >/dev/null 2>&1 &
+            return
+        fi
+    done
+    # Last resort: OS default browser
+    if   command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
+    elif command -v open     >/dev/null 2>&1; then open "$url"
+    elif command -v start    >/dev/null 2>&1; then start "" "$url"
+    else printf "Open manually: %s\n" "$url"
+    fi
+}
+
+
 check_one() {
     local label="$1"; shift
     if "$@" >/dev/null 2>&1; then
@@ -165,16 +200,7 @@ cmd_open_web() {
         printf "\n${Y}Server not running — starting it.${NC}\n"
         cmd_server || return 1
     fi
-    if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$url" >/dev/null 2>&1 &
-    elif command -v open >/dev/null 2>&1; then
-        open "$url"
-    elif command -v start >/dev/null 2>&1; then
-        start "$url"
-    else
-        printf "Open manually: %s\n\n" "$url"
-        return 0
-    fi
+    open_url "$url"
     printf "→ Opened %s\n\n" "$url"
 }
 
@@ -218,10 +244,7 @@ cmd_dashboard() {
 
     local url="http://localhost:$port"
     printf "${G}→ Dashboard at %s${NC}\n\n" "$url"
-    if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
-    elif command -v open >/dev/null 2>&1; then open "$url"
-    elif command -v start >/dev/null 2>&1; then start "" "$url"
-    fi
+    open_url "$url"
 }
 
 cmd_stop_server() {
