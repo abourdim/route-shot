@@ -58,6 +58,17 @@
   .save-hint { color: var(--mute); font-size: 12px; }
   .save-hint.dirty { color: var(--warn); }
   .save-hint.saved { color: var(--good); }
+
+  /* scan results table */
+  .scan-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  .scan-table th { text-align: left; padding: 6px 8px; color: var(--mute);
+    font-weight: 500; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; }
+  .scan-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .scan-table tr.hidden-el { opacity: 0.4; }
+  .scan-table td code { font-size: 12px; }
+  .scan-table td.sel { max-width: 300px; overflow-x: auto; white-space: nowrap; }
+  .pill { display: inline-block; padding: 1px 6px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px; font-size: 11px; margin-right: 4px; }
 </style>
 </head>
 <body>
@@ -103,6 +114,24 @@
         <button id="impBtn">Import + merge into apps.json</button>
       </div>
     </details>
+  </section>
+
+  <section class="panel" style="grid-column: 1 / -1;">
+    <h2>Scan URL → pick buttons</h2>
+    <div class="row">
+      <input type="text" id="scanUrl" placeholder="https://example.com (leave blank to use first app in apps.json)">
+      <input type="text" id="scanDismiss" placeholder="dismiss selector (optional)" style="flex: 1;">
+      <button id="scanBtn">Scan</button>
+    </div>
+    <div class="row muted" id="scanStatus"></div>
+    <div id="scanResults" style="max-height: 400px; overflow-y: auto;"></div>
+    <div class="row" id="scanActions" style="display: none;">
+      <button id="scanAllBtn">Select all</button>
+      <button id="scanNoneBtn">Select none</button>
+      <button id="scanVisibleBtn">Only visible</button>
+      <select id="scanTargetApp"></select>
+      <button id="scanAddBtn" class="primary">Add checked selectors to clicks[]</button>
+    </div>
   </section>
 
   <section class="panel" style="grid-column: 1 / -1;">
@@ -272,6 +301,110 @@ async function loadGallery() {
     g.appendChild(a);
   }
 }
+
+// --- scan ------------------------------------------------------------------
+let scanItems = [];
+
+async function populateTargetAppSelect() {
+  try {
+    const r = await fetchJSON('/api/apps');
+    const sel = $('scanTargetApp');
+    sel.innerHTML = '';
+    (r.apps || []).forEach((a, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `→ ${a.name || '(unnamed)'} (${i})`;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+}
+
+$('scanBtn').onclick = async () => {
+  let url = $('scanUrl').value.trim();
+  let dismiss = $('scanDismiss').value.trim();
+  if (!url) {
+    // use first app's URL + dismiss from apps.json
+    const r = await fetchJSON('/api/apps');
+    const first = (r.apps || [])[0];
+    if (!first) { alert('No URL given and apps.json is empty.'); return; }
+    url = first.url;
+    if (!dismiss) dismiss = first.dismiss || '';
+    $('scanUrl').value = url;
+    if (dismiss && !$('scanDismiss').value) $('scanDismiss').value = dismiss;
+  }
+  $('scanStatus').textContent = 'Scanning… (launching Chromium, this takes a few seconds)';
+  $('scanResults').innerHTML = '';
+  $('scanActions').style.display = 'none';
+  try {
+    const r = await fetchJSON('/api/scan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, dismiss: dismiss || undefined }),
+    });
+    if (r.error) { $('scanStatus').textContent = 'Error: ' + r.error; return; }
+    scanItems = r.items;
+    renderScanTable();
+    $('scanStatus').textContent = `Found ${r.count} clickable element(s) — ${r.items.filter(i=>i.visible).length} visible.`;
+    $('scanActions').style.display = 'flex';
+    await populateTargetAppSelect();
+  } catch (e) {
+    $('scanStatus').textContent = 'Scan failed: ' + e.message;
+  }
+};
+
+function renderScanTable() {
+  const rows = scanItems.map((it, i) => {
+    const hasId = !!it.id;
+    const label = it.text || it.id || '(no text)';
+    return `<tr class="${it.visible ? '' : 'hidden-el'}" data-i="${i}">
+      <td><input type="checkbox" class="scan-cb" ${it.visible && hasId ? 'checked' : ''}></td>
+      <td><span class="pill">${it.tag}</span>${it.role ? `<span class="pill">${it.role}</span>` : ''}</td>
+      <td>${escapeHtml(label).slice(0, 60)}</td>
+      <td>${it.id ? `<code>#${escapeHtml(it.id)}</code>` : '<span class="muted">—</span>'}</td>
+      <td class="sel"><code>${escapeHtml(it.selector)}</code></td>
+    </tr>`;
+  }).join('');
+  $('scanResults').innerHTML = `
+    <table class="scan-table">
+      <thead><tr><th></th><th>Tag</th><th>Label</th><th>ID</th><th>Selector</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+$('scanAllBtn').onclick    = () => document.querySelectorAll('.scan-cb').forEach((cb) => cb.checked = true);
+$('scanNoneBtn').onclick   = () => document.querySelectorAll('.scan-cb').forEach((cb) => cb.checked = false);
+$('scanVisibleBtn').onclick = () => {
+  document.querySelectorAll('#scanResults tr[data-i]').forEach((tr) => {
+    const i = Number(tr.dataset.i);
+    const cb = tr.querySelector('.scan-cb');
+    cb.checked = scanItems[i].visible;
+  });
+};
+
+$('scanAddBtn').onclick = async () => {
+  const picked = [];
+  document.querySelectorAll('#scanResults tr[data-i]').forEach((tr) => {
+    const cb = tr.querySelector('.scan-cb');
+    if (cb.checked) picked.push(scanItems[Number(tr.dataset.i)].selector);
+  });
+  if (!picked.length) { alert('Nothing checked.'); return; }
+  const r = await fetchJSON('/api/apps');
+  const idx = Number($('scanTargetApp').value || 0);
+  const app = (r.apps || [])[idx];
+  if (!app) { alert('App index out of range.'); return; }
+  app.clicks = [...new Set([...(app.clicks || []), ...picked])];
+  if (!app.clickMode) app.clickMode = 'independent';
+  const save = await fetchJSON('/api/apps', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(r),
+  });
+  if (save.error) { alert(save.error); return; }
+  $('scanStatus').textContent = `Added ${picked.length} selector(s) to "${app.name}" · clicks[].`;
+  await loadApps();
+};
 
 loadApps();
 loadGallery();

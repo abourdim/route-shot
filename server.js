@@ -197,6 +197,60 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, nothing: true });
     }
 
+    // API: scan — launch Playwright, goto URL, dismiss, enumerate clickables
+    if (pathname === '/api/scan' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!body.url) return json(res, 400, { error: 'url required' });
+      try {
+        const { chromium } = require('playwright');
+        const browser = await chromium.launch();
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        await page.goto(body.url, { waitUntil: 'networkidle', timeout: 20000 });
+        // dismiss modal(s) if provided
+        if (body.dismiss) {
+          for (const sel of String(body.dismiss).split(',').map((s) => s.trim()).filter(Boolean)) {
+            try {
+              const el = await page.$(sel);
+              if (el) { await el.click({ timeout: 1000 }); await page.waitForTimeout(400); }
+            } catch {}
+          }
+        }
+        // optional: run a short preSteps list before scanning (for auth, expert-mode, etc)
+        if (Array.isArray(body.preSteps)) {
+          for (const s of body.preSteps) {
+            try {
+              if (s.action === 'click' && s.selector) await page.locator(s.selector).first().click({ timeout: 3000 });
+              else if (s.action === 'fill')           await page.locator(s.selector).first().fill(s.value || '', { timeout: 3000 });
+              else if (s.action === 'wait')           await page.waitForTimeout(Number(s.value || 500));
+            } catch {}
+          }
+        }
+        const items = await page.$$eval(
+          'button, [role=button], input[type=button], input[type=submit], a',
+          (els) => els.map((e, i) => {
+            const text = (e.innerText || e.value || e.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+            const id   = e.id || '';
+            const cls  = (e.className && typeof e.className === 'string') ? e.className.trim().split(/\s+/).filter(Boolean).join('.') : '';
+            const tag  = e.tagName.toLowerCase();
+            const role = e.getAttribute('role') || '';
+            const rect = e.getBoundingClientRect();
+            const visible = rect.width > 0 && rect.height > 0 && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none';
+            let selector = '';
+            if (id)        selector = `#${id}`;
+            else if (cls)  selector = `${tag}.${cls}`;
+            else if (text) selector = `${tag}:has-text(${JSON.stringify(text.slice(0, 40))})`;
+            else           selector = `${tag}:nth-of-type(${i + 1})`;
+            return { tag, id, text, cls, role, selector, visible };
+          })
+        );
+        await browser.close();
+        return json(res, 200, { count: items.length, items });
+      } catch (e) {
+        return json(res, 500, { error: e.message });
+      }
+    }
+
     // API: import recording (multipart not implemented — accept JSON body)
     if (pathname === '/api/import-recording' && req.method === 'POST') {
       const body = await readBody(req);
