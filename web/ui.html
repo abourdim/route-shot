@@ -63,6 +63,20 @@
   .rail .kbd-hint { position: absolute; top: 3px; right: 3px;
     font-size: 9px; color: var(--mute); opacity: 0.5; }
 
+  /* Persistent mini-log ticker at the bottom of the rail */
+  .rail .log-ticker {
+    writing-mode: vertical-rl; transform: rotate(180deg);
+    font: 10px/1.2 "Cascadia Mono", Consolas, monospace;
+    color: var(--mute); max-height: 240px; overflow: hidden;
+    padding: 6px 2px; cursor: pointer;
+    border-top: 1px dashed var(--border);
+    opacity: .7; transition: opacity .15s;
+    text-align: center;
+  }
+  .rail .log-ticker:hover { opacity: 1; color: var(--accent); }
+  .rail .log-ticker.empty { opacity: .4; font-style: italic; }
+  .rail .log-ticker.running { color: var(--warn); animation: pulse 1.5s infinite; }
+
   /* ── Canvas: one view at a time ── */
   main { padding: 28px 32px 48px; max-width: 1500px; margin: 0 auto; width: 100%; }
   main > [data-view] { display: none; }
@@ -269,7 +283,9 @@
   textarea { resize: vertical; min-height: 280px; white-space: pre; tab-size: 2; }
   .logs { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
     padding: 10px; font: 12px/1.4 "Cascadia Mono", Consolas, monospace;
-    height: 300px; overflow-y: auto; white-space: pre-wrap; color: var(--ink); }
+    height: 300px; overflow-y: auto; white-space: pre-wrap; color: var(--ink);
+    transition: box-shadow .3s; }
+  .logs.flash { box-shadow: 0 0 0 3px var(--accent); }
   .logs .err { color: var(--bad); }
   .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 10px; margin-top: 10px; max-height: 70vh; overflow-y: auto; padding-right: 4px; }
@@ -479,6 +495,7 @@
   <button data-view="scan"                   title="Scan URL (4)"><span class="ri">🔍</span>Scan<span class="kbd-hint">4</span></button>
   <button data-view="export"                 title="Export (5)"><span class="ri">🎬</span>Export<span class="kbd-hint">5</span></button>
   <div class="spacer"></div>
+  <div class="log-ticker empty" id="logTicker" title="Jump to Run logs">(no runs yet)</div>
   <button data-view="help" title="User guide (new tab)" onclick="window.open('/userguide.html', '_blank')"><span class="ri">❓</span>Help</button>
 </aside>
 
@@ -961,10 +978,36 @@ document.getElementById('themeBtn')?.addEventListener('click', () => {
   try { saved = localStorage.getItem(THEME_KEY) || saved; } catch {}
   applyTheme(saved);
 })();
-document.getElementById('logScrollBtn')?.addEventListener('click', () => {
+function jumpToLogs() {
+  setView('run');
+  setTimeout(() => {
+    const logs = document.getElementById('logs');
+    if (logs) logs.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    logs?.classList.add('flash'); setTimeout(() => logs?.classList.remove('flash'), 800);
+  }, 60);
+}
+document.getElementById('logScrollBtn')?.addEventListener('click', jumpToLogs);
+document.getElementById('logTicker')?.addEventListener('click', jumpToLogs);
+
+// Update the rail ticker whenever new log lines land. The Run view's
+// log pane is fed by pollLogs(); we watch it for changes via MutationObserver.
+(function wireLogTicker() {
   const logs = document.getElementById('logs');
-  if (logs) logs.scrollIntoView({ behavior: 'smooth', block: 'center' });
-});
+  const ticker = document.getElementById('logTicker');
+  if (!logs || !ticker) return;
+  const refresh = () => {
+    const lines = logs.textContent.trim().split('\n').filter(Boolean);
+    if (!lines.length) { ticker.textContent = '(no runs yet)'; ticker.classList.add('empty'); return; }
+    const last = lines[lines.length - 1].slice(0, 80);
+    ticker.textContent = last;
+    ticker.classList.remove('empty');
+    // status pill drives running class on ticker too
+    const running = document.getElementById('status')?.classList.contains('running');
+    ticker.classList.toggle('running', !!running);
+  };
+  new MutationObserver(refresh).observe(logs, { childList: true, characterData: true, subtree: true });
+  new MutationObserver(refresh).observe(document.getElementById('status'), { attributes: true, attributeFilter: ['class'] });
+})();
 (function renderHijri() {
   try {
     const s = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {
