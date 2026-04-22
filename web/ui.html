@@ -31,9 +31,40 @@
   .status.running .dot { background: var(--warn); animation: pulse 1s infinite; }
   .status.idle .dot { background: var(--good); }
   @keyframes pulse { 50% { opacity: 0.3; } }
-  main { display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-    padding: 20px 28px; max-width: 1760px; margin: 0 auto; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  /* ── Left rail navigation — one tool at a time ── */
+  .rail { position: fixed; top: 0; bottom: 0; left: 0; width: 68px;
+    background: var(--panel); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 90px 0 14px; gap: 4px; z-index: 40; }
+  .rail button {
+    width: 52px; height: 56px; padding: 6px 0;
+    background: transparent; border: 1px solid transparent;
+    border-radius: 10px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; color: var(--mute); font-size: 10px; line-height: 1.1;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .rail button .ri { font-size: 20px; line-height: 1; }
+  .rail button:hover { color: var(--ink); background: var(--code-bg); }
+  .rail button.active {
+    color: var(--accent); background: rgba(88,166,255,0.08);
+    border-color: rgba(88,166,255,0.35);
+  }
+  .rail .spacer { flex: 1; }
+  .rail .kbd-hint { position: absolute; top: 3px; right: 3px;
+    font-size: 9px; color: var(--mute); opacity: 0.5; }
+
+  /* ── Canvas: one view at a time ── */
+  main { padding: 22px 28px; max-width: 1600px;
+    margin: 0 auto 0 68px; /* room for rail */ }
+  @media (min-width: 1900px) { main { margin: 0 auto; padding-left: 96px; } }
+  main > [data-view] { display: none; }
+  main > [data-view].active { display: block; }
+  /* Run view keeps Run + App editor side-by-side since they're workflow-linked */
+  main > [data-view="run"].active { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 1100px) {
+    main > [data-view="run"].active { grid-template-columns: 1fr; }
+  }
   .panel { background: var(--panel); border: 1px solid var(--border);
     border-radius: 8px; padding: 18px 22px; }
   .panel h2 { margin: 0 0 14px; font-size: 14px; color: var(--accent);
@@ -385,8 +416,18 @@
   </div>
 </header>
 
+<aside class="rail" aria-label="Tool navigation">
+  <button data-view="manual"  class="active" title="Manual snapshot session (1)"><span class="ri">📸</span>Manual<span class="kbd-hint">1</span></button>
+  <button data-view="library"                title="Screenshots library (2)"><span class="ri">🖼️</span>Library<span class="kbd-hint">2</span></button>
+  <button data-view="run"                    title="Crawl + edit app (3)"><span class="ri">🏃</span>Run<span class="kbd-hint">3</span></button>
+  <button data-view="scan"                   title="Scan URL (4)"><span class="ri">🔍</span>Scan<span class="kbd-hint">4</span></button>
+  <button data-view="export"                 title="Export (5)"><span class="ri">🎬</span>Export<span class="kbd-hint">5</span></button>
+  <div class="spacer"></div>
+  <button data-view="help" title="User guide (new tab)" onclick="window.open('/userguide.html', '_blank')"><span class="ri">❓</span>Help</button>
+</aside>
+
 <main>
-  <section class="panel hero" style="grid-column: 1 / -1;">
+  <section class="panel hero" data-view="manual" style="grid-column: 1 / -1;">
     <h2>📸 Manual snapshot session
       <span class="hero-sub">drive a headful browser by hand · Ctrl/Cmd+Shift+S snaps</span>
       <span class="summary-tag" id="manualSummaryTag" style="margin-left: auto; align-self: center;">idle</span>
@@ -407,7 +448,7 @@
     <div id="manualStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
   </section>
 
-  <section class="panel hero" style="grid-column: 1 / -1;">
+  <section class="panel hero" data-view="library" style="grid-column: 1 / -1;">
     <h2>🖼️ Screenshots
       <span class="hero-sub">every captured file · click a thumbnail for the lightbox</span>
       <span class="muted" id="shotCount" style="margin-left: auto; align-self: center;"></span>
@@ -416,6 +457,7 @@
     <div class="gallery" id="gallery"></div>
   </section>
 
+  <div data-view="run">
   <section class="panel">
     <h2>Run</h2>
     <div class="row">
@@ -526,9 +568,10 @@
       </div>
     </details>
   </section>
+  </div><!-- /data-view="run" -->
 
 
-  <details class="panel-collapse" open style="grid-column: 1 / -1;">
+  <details class="panel-collapse" open data-view="scan" style="grid-column: 1 / -1;">
     <summary>
       <span>Scan URL → pick buttons</span>
       <span class="summary-tag" id="scanSummaryTag"></span>
@@ -567,7 +610,7 @@
     </div>
   </details>
 
-  <details class="panel-collapse" style="grid-column: 1 / -1;">
+  <details class="panel-collapse" data-view="export" open style="grid-column: 1 / -1;">
     <summary>
       <span>🎁 Export — promo / gallery / PDF / video</span>
       <span class="summary-tag muted">social-ready</span>
@@ -792,6 +835,36 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+// ── Left-rail view switcher — one tool visible at a time ───────────────────
+const VIEW_KEY = 'route-shot.view.v1';
+function setView(name) {
+  document.querySelectorAll('main > [data-view]').forEach((el) => {
+    el.classList.toggle('active', el.dataset.view === name);
+  });
+  document.querySelectorAll('.rail button[data-view]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.view === name);
+  });
+  try { localStorage.setItem(VIEW_KEY, name); } catch {}
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.querySelectorAll('.rail button[data-view]').forEach((btn) => {
+  if (btn.dataset.view === 'help') return;  // opens a new tab
+  btn.addEventListener('click', () => setView(btn.dataset.view));
+});
+// Number keys 1-5 jump directly; ignore typing in fields.
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+  const map = { '1': 'manual', '2': 'library', '3': 'run', '4': 'scan', '5': 'export' };
+  if (map[e.key]) { e.preventDefault(); setView(map[e.key]); }
+});
+(function initView() {
+  let saved = 'manual';
+  try { saved = localStorage.getItem(VIEW_KEY) || saved; } catch {}
+  if (!document.querySelector(`[data-view="${saved}"]`)) saved = 'manual';
+  setView(saved);
+})();
 
 // Workshop-DIY header: icon buttons + hijri date.
 document.getElementById('helpBtn')?.addEventListener('click', () => window.open('/userguide.html', '_blank'));
