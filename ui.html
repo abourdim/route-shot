@@ -85,6 +85,9 @@
   .scan-table tr.hidden-el { opacity: 0.4; }
   .scan-table td code { font-size: 12px; }
   .scan-table td.sel { max-width: 300px; overflow-x: auto; white-space: nowrap; }
+  .copyable { cursor: copy; position: relative; }
+  .copyable:hover { background: rgba(88, 166, 255, 0.08); border-radius: 3px; }
+  .copyable.flash { background: rgba(63, 185, 80, 0.25) !important; transition: background 0.4s; }
   .pill { display: inline-block; padding: 1px 6px; background: var(--bg);
     border: 1px solid var(--border); border-radius: 10px; font-size: 11px; margin-right: 4px; }
 
@@ -528,20 +531,47 @@ $('scanBtn').onclick = async () => {
 function renderScanTable() {
   const rows = scanItems.map((it, i) => {
     const hasId = !!it.id;
-    const label = it.text || it.id || '(no text)';
+    const rawLabel = it.text || it.id || '';
+    const label = rawLabel || '(no text)';
+    const idCell = it.id
+      ? `<code class="copyable" data-copy="${escapeHtml(it.id)}" title="Click to copy">#${escapeHtml(it.id)}</code>`
+      : '<span class="muted">—</span>';
+    const labelCell = rawLabel
+      ? `<span class="copyable" data-copy="${escapeHtml(rawLabel)}" title="Click to copy">${escapeHtml(label).slice(0, 60)}</span>`
+      : '<span class="muted">(no text)</span>';
     return `<tr class="${it.visible ? '' : 'hidden-el'}" data-i="${i}">
       <td><input type="checkbox" class="scan-cb" ${it.visible && hasId ? 'checked' : ''}></td>
       <td><span class="pill">${it.tag}</span>${it.role ? `<span class="pill">${it.role}</span>` : ''}</td>
-      <td>${escapeHtml(label).slice(0, 60)}</td>
-      <td>${it.id ? `<code>#${escapeHtml(it.id)}</code>` : '<span class="muted">—</span>'}</td>
-      <td class="sel"><code>${escapeHtml(it.selector)}</code></td>
+      <td>${labelCell}</td>
+      <td>${idCell}</td>
+      <td class="sel"><code class="copyable" data-copy="${escapeHtml(it.selector)}" title="Click to copy">${escapeHtml(it.selector)}</code></td>
     </tr>`;
   }).join('');
   $('scanResults').innerHTML = `
     <table class="scan-table">
-      <thead><tr><th></th><th>Tag</th><th>Label</th><th>ID</th><th>Selector</th></tr></thead>
+      <thead><tr><th></th><th>Tag</th><th>Label <span class="muted" style="font-weight:normal;">(click to copy)</span></th><th>ID</th><th>Selector</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+
+  // wire click-to-copy
+  $('scanResults').querySelectorAll('.copyable').forEach((el) => {
+    el.onclick = async (e) => {
+      e.stopPropagation();
+      const val = el.dataset.copy;
+      try {
+        await navigator.clipboard.writeText(val);
+        el.classList.add('flash');
+        $('scanStatus').textContent = `Copied: ${val}`;
+        setTimeout(() => el.classList.remove('flash'), 400);
+      } catch {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = val; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); ta.remove();
+        $('scanStatus').textContent = `Copied: ${val}`;
+      }
+    };
+  });
 }
 
 function escapeHtml(s) {
