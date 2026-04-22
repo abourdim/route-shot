@@ -41,3 +41,11 @@ videos/
 !apps.example.json
 !package.json
 !package-lock.json
+
+# audio binaries — we commit the README + fetcher template, not the mp3s
+audio/library/*.mp3
+audio/library/*.wav
+audio/library/*.m4a
+audio/uploads/
+audio/cache/
+!audio/library/README.md

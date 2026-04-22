@@ -21,6 +21,9 @@ const PRESETS_DIR = path.join(ROOT, 'presets');
 const EXPORTS_SUBDIR = 'exports';
 const GALLERIES  = path.join(ROOT, 'galleries');
 const VIDEOS     = path.join(ROOT, 'videos');
+const AUDIO_LIB  = path.join(ROOT, 'audio', 'library');
+const AUDIO_UP   = path.join(ROOT, 'audio', 'uploads');
+const AUDIO_CACHE = path.join(ROOT, 'audio', 'cache');
 
 // Filesystem-safe slug for gallery/video folder names (letters, digits, -, _).
 function slugName(s) {
@@ -320,12 +323,69 @@ function readBody(req) {
   });
 }
 
+// List audio tracks under audio/library/ + audio/uploads/. Returns
+// [{ path: 'library/foo.mp3', name: 'foo.mp3', source: 'library'|'uploads' }].
+function listAudioTracks() {
+  const out = [];
+  for (const [dir, source] of [[AUDIO_LIB, 'library'], [AUDIO_UP, 'uploads']]) {
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir)) {
+      if (!/\.(mp3|wav|m4a|ogg)$/i.test(f)) continue;
+      out.push({ path: `${source}/${f}`, name: f, source });
+    }
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+// Resolve an audio spec → absolute file path the renderer can feed to ffmpeg.
+// Accepts:
+//   - 'library/foo.mp3' | 'uploads/bar.wav'  (relative to audio/)
+//   - 'http(s)://...'                        (downloads to audio/cache/ on first use)
+// Returns { ok: true, path } or { ok: false, error }.
+async function resolveAudioSource(spec) {
+  if (!spec || typeof spec !== 'string') return { ok: false, error: 'no audio' };
+  if (/^https?:\/\//i.test(spec)) {
+    fs.mkdirSync(AUDIO_CACHE, { recursive: true });
+    // Hash the URL into a stable filename. Keep the extension if present.
+    let ext = '.mp3';
+    try { const u = new URL(spec); const m = u.pathname.match(/\.(mp3|wav|m4a|ogg)$/i); if (m) ext = m[0]; } catch {}
+    const hash = require('crypto').createHash('sha1').update(spec).digest('hex').slice(0, 16);
+    const cached = path.join(AUDIO_CACHE, hash + ext);
+    if (fs.existsSync(cached)) return { ok: true, path: cached };
+    try {
+      await new Promise((resolve, reject) => {
+        const https = require(spec.startsWith('https') ? 'https' : 'http');
+        const file = fs.createWriteStream(cached);
+        https.get(spec, (r) => {
+          if (r.statusCode !== 200) {
+            fs.unlink(cached, () => {});
+            return reject(new Error('HTTP ' + r.statusCode));
+          }
+          r.pipe(file);
+          file.on('finish', () => file.close(resolve));
+        }).on('error', (e) => { fs.unlink(cached, () => {}); reject(e); });
+      });
+      return { ok: true, path: cached };
+    } catch (e) { return { ok: false, error: 'download failed: ' + e.message }; }
+  }
+  // Relative spec — only allow library/uploads/cache subdirs
+  if (!/^(library|uploads|cache)\/[\w.-]+$/.test(spec)) {
+    return { ok: false, error: 'invalid audio path' };
+  }
+  const abs = path.join(ROOT, 'audio', spec);
+  if (!abs.startsWith(path.join(ROOT, 'audio') + path.sep)) {
+    return { ok: false, error: 'path traversal blocked' };
+  }
+  if (!fs.existsSync(abs)) return { ok: false, error: 'audio not found: ' + spec };
+  return { ok: true, path: abs };
+}
+
 // Render one slideshow video. Pure function — no dependency on req/res, used
 // both by the single-mode /api/export/video endpoint and the batch loop.
 // Returns { ok, webm, mp4?, ms } on success or { error } on failure.
 // mp4Promise (ffmpeg transcode) runs in the background — push the returned
 // promise onto videoBatch.transcodes and resolve it later.
-async function renderOneVideoMode({ shotPaths, fmt, frameMs, fps, watermark, style, bgMusic, outDir, baseName, silent }) {
+async function renderOneVideoMode({ shotPaths, fmt, frameMs, fps, watermark, style, bgMusic, outDir, baseName, silent, audioPath, volume, fadeInMs, fadeOutMs }) {
   const cfg = {
     fps,
     watermark: watermark || '',
@@ -370,15 +430,38 @@ async function renderOneVideoMode({ shotPaths, fmt, frameMs, fps, watermark, sty
     // Fire ffmpeg transcode in the background — do NOT await, so the caller
     // can move on to the next render immediately. Caller collects the Promise.
     const mp4Out = webmOut.replace(/\.webm$/, '.mp4');
+    // Build ffmpeg args. If audio is provided (and silent is not set), add
+    // a second input + audio filter + aac encoding. Otherwise mp4 ships
+    // silent (video-only, same as before).
+    const useAudio = !silent && audioPath && fs.existsSync(audioPath);
+    const args = ['-y', '-i', webmOut];
+    if (useAudio) {
+      // Loop the audio so it covers videos longer than the track, then
+      // -shortest clips to video length.
+      args.push('-stream_loop', '-1', '-i', audioPath);
+    }
+    args.push(
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
+      '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+    );
+    if (useAudio) {
+      const videoSeconds = (shotPaths.length * frameMs) / 1000;
+      const vol     = Math.max(0, Math.min(1, (volume ?? 70) / 100));
+      const fadeIn  = Math.max(0, (fadeInMs  ?? 500) / 1000);
+      const fadeOut = Math.max(0, (fadeOutMs ?? 500) / 1000);
+      const fadeOutStart = Math.max(0, videoSeconds - fadeOut).toFixed(2);
+      const afilter = [
+        `volume=${vol}`,
+        fadeIn  > 0 ? `afade=t=in:st=0:d=${fadeIn}` : null,
+        fadeOut > 0 ? `afade=t=out:st=${fadeOutStart}:d=${fadeOut}` : null,
+      ].filter(Boolean).join(',');
+      args.push('-c:a', 'aac', '-b:a', '192k', '-af', afilter, '-shortest');
+    }
+    args.push(mp4Out);
     const mp4Promise = new Promise((resolve) => {
-      const ff = spawn('ffmpeg', [
-        '-y', '-i', webmOut,
-        '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
-        '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-        mp4Out,
-      ], { stdio: 'ignore' });
+      const ff = spawn('ffmpeg', args, { stdio: 'ignore' });
       ff.on('error', () => resolve({ ok: false }));
-      ff.on('exit', (code) => resolve({ ok: code === 0, path: mp4Out }));
+      ff.on('exit', (code) => resolve({ ok: code === 0, path: mp4Out, audio: useAudio }));
     });
     return { ok: true, webm: webmOut, mp4Promise, ms: Date.now() - startedAt };
   } catch (e) {
@@ -1183,6 +1266,21 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { return json(res, 500, { error: 'PDF export failed: ' + e.message }); }
     }
 
+    // GET /api/audio/list — populate the dashboard's audio dropdown from
+    // audio/library/ and audio/uploads/.
+    if (pathname === '/api/audio/list' && req.method === 'GET') {
+      return json(res, 200, { tracks: listAudioTracks() });
+    }
+    // GET /audio/<library|uploads|cache>/<file> — serve audio files for
+    // preview / browser playback (small 50 MB cap).
+    if (pathname.startsWith('/audio/') && req.method === 'GET') {
+      const rel = pathname.slice('/audio/'.length);
+      if (!/^(library|uploads|cache)\/[\w.-]+$/.test(rel)) { res.writeHead(400); return res.end(); }
+      const abs = path.join(ROOT, 'audio', rel);
+      if (!abs.startsWith(path.join(ROOT, 'audio') + path.sep)) { res.writeHead(403); return res.end(); }
+      return serveFile(res, abs);
+    }
+
     // GET /api/export/video/batch/status
     // Poll this to drive the batch progress UI — cheap, no side effects.
     if (pathname === '/api/export/video/batch/status' && req.method === 'GET') {
@@ -1240,6 +1338,12 @@ const server = http.createServer(async (req, res) => {
         shotPaths = files.map((f) => `${app}/${f}`);
         outApp = app;
       }
+      // Resolve audio once for the whole batch — all modes share the same track
+      let audioPath = null;
+      if (!body.silent && body.audio) {
+        const ar = await resolveAudioSource(body.audio);
+        if (ar.ok) audioPath = ar.path;
+      }
       // Set up the run folder
       const runName = slugName(body.title || outApp) + '_batch_' + stamp();
       const runDir  = path.join(VIDEOS, runName);
@@ -1270,6 +1374,10 @@ const server = http.createServer(async (req, res) => {
               outDir:    runDir,
               baseName:  base,
               silent:    !!body.silent,
+              audioPath,
+              volume:    Number(body.volume    ?? 70),
+              fadeInMs:  Number(body.fadeInMs  ?? 500),
+              fadeOutMs: Number(body.fadeOutMs ?? 500),
             });
             if (r.ok) {
               videoBatch.done.push({ mode, webm: `${base}.webm`, ms: r.ms });
@@ -1385,6 +1493,12 @@ const server = http.createServer(async (req, res) => {
           };
         }),
       };
+      // Resolve audio (optional) — the mp4 transcode will mux it over the video.
+      let audioPath = null;
+      if (!body.silent && body.audio) {
+        const ar = await resolveAudioSource(body.audio);
+        if (ar.ok) audioPath = ar.path;
+      }
       // Timestamped run folder under videos/, like galleries/ — each render
       // keeps its own directory with webm/mp4/meta.json.
       const runName = slugName(body.title || outApp) + '_' + stamp();
@@ -1417,25 +1531,38 @@ const server = http.createServer(async (req, res) => {
         await ctx.close();
         await browser.close();
         fs.renameSync(tempPath, webmOut);
-        // Try mp4 transcode if ffmpeg is on PATH.
+        // Try mp4 transcode if ffmpeg is on PATH — mux audio in if provided.
         let finalFile = `videos/${runName}/video-${body.format}.webm`;
         try {
           const mp4Out = webmOut.replace(/\.webm$/, '.mp4');
+          const useAudio = !!audioPath;
+          const args = ['-y', '-i', webmOut];
+          if (useAudio) args.push('-stream_loop', '-1', '-i', audioPath);
+          args.push(
+            '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
+            '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+          );
+          if (useAudio) {
+            const videoSeconds = (shotPaths.length * frameMs) / 1000;
+            const vol     = Math.max(0, Math.min(1, Number(body.volume    ?? 70) / 100));
+            const fadeIn  = Math.max(0, Number(body.fadeInMs  ?? 500) / 1000);
+            const fadeOut = Math.max(0, Number(body.fadeOutMs ?? 500) / 1000);
+            const fadeOutStart = Math.max(0, videoSeconds - fadeOut).toFixed(2);
+            const afilter = [
+              `volume=${vol}`,
+              fadeIn  > 0 ? `afade=t=in:st=0:d=${fadeIn}` : null,
+              fadeOut > 0 ? `afade=t=out:st=${fadeOutStart}:d=${fadeOut}` : null,
+            ].filter(Boolean).join(',');
+            args.push('-c:a', 'aac', '-b:a', '192k', '-af', afilter, '-shortest');
+          }
+          args.push(mp4Out);
           await new Promise((resolve, reject) => {
-            // -crf 18 = visually-lossless H.264, preset slow for better
-            // compression at the same quality. Adds ~30% encode time but the
-            // resulting MP4 is noticeably sharper than the default -crf 23.
-            const ff = spawn('ffmpeg', [
-              '-y', '-i', webmOut,
-              '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
-              '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-              mp4Out,
-            ], { stdio: 'ignore' });
+            const ff = spawn('ffmpeg', args, { stdio: 'ignore' });
             ff.on('error', reject);
             ff.on('exit', (code) => code === 0 ? resolve() : reject(new Error('ffmpeg exit ' + code)));
           });
           finalFile = `videos/${runName}/video-${body.format}.mp4`;
-        } catch { /* ffmpeg missing — keep webm */ }
+        } catch { /* ffmpeg missing or failed — keep webm */ }
         fs.writeFileSync(path.join(outDir, 'meta.json'), JSON.stringify({
           title: body.title || '', app: outApp, format: body.format, style: body.style || 'minimal',
           ts: Date.now(), frames: cfg.frames.length, w: fmt.w, h: fmt.h, frameMs,

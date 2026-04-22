@@ -445,6 +445,25 @@
         <input type="text" id="videoWatermark" placeholder="watermark (optional)" style="flex: 1;">
         <button id="videoGoBtn" class="primary">Render video</button>
       </div>
+
+      <!-- Audio (optional) — muxed in via ffmpeg at mp4 time -->
+      <div class="row" style="align-items: center;">
+        <label class="muted" style="font-size: 12px; min-width: 92px;">🎵 Audio</label>
+        <select id="videoAudio" style="flex: 1;" title="Pick a track from audio/library/ or audio/uploads/">
+          <option value="">— none (silent) —</option>
+        </select>
+        <input type="text" id="videoAudioUrl" placeholder="or paste MP3/WAV URL (downloaded + cached)" style="flex: 1;">
+      </div>
+      <div class="row" style="align-items: center;">
+        <label class="muted" style="font-size: 12px; min-width: 92px;">Volume / fades</label>
+        <input type="number" id="videoVolume"  min="0" max="100" value="70" style="width: 70px;"  title="Volume % (0–100)">
+        <span class="muted" style="font-size: 11px;">%</span>
+        <input type="number" id="videoFadeIn"  min="0" step="50" value="500" style="width: 80px;" title="Fade-in ms">
+        <span class="muted" style="font-size: 11px;">ms fade-in</span>
+        <input type="number" id="videoFadeOut" min="0" step="50" value="500" style="width: 80px;" title="Fade-out ms">
+        <span class="muted" style="font-size: 11px;">ms fade-out</span>
+        <button id="videoAudioPreview" type="button" style="font-size: 11px;" title="Play the selected track">▶ preview</button>
+      </div>
       <div class="row" style="align-items: flex-start;">
         <label class="muted" style="font-size: 12px; padding-top: 6px; min-width: 92px;">Pick shots<br><span style="opacity:0.7;">(Ctrl/Shift)</span></label>
         <select id="videoShots" multiple size="6" style="flex: 1; font-size: 12px; font-family: monospace;"></select>
@@ -1014,6 +1033,65 @@ $('pdfGoBtn')?.addEventListener('click', async () => {
   finally { btn.disabled = false; }
 });
 
+// Populate the audio dropdown from /api/audio/list and persist the selection.
+async function loadAudioLibrary() {
+  const sel = $('videoAudio');
+  if (!sel) return;
+  try {
+    const r = await (await fetch('/api/audio/list')).json();
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— none (silent) —</option>';
+    if (r.tracks?.length) {
+      let lastSource = null;
+      for (const t of r.tracks) {
+        if (t.source !== lastSource) {
+          const sep = document.createElement('option');
+          sep.textContent = '── ' + t.source + ' ──';
+          sep.disabled = true;
+          sel.appendChild(sep);
+          lastSource = t.source;
+        }
+        const o = document.createElement('option');
+        o.value = t.path; o.textContent = t.name;
+        sel.appendChild(o);
+      }
+    } else {
+      const tip = document.createElement('option');
+      tip.disabled = true;
+      tip.textContent = '(empty — drop MP3s into audio/library/)';
+      sel.appendChild(tip);
+    }
+    if (current && [...sel.options].some((o) => o.value === current)) sel.value = current;
+  } catch {}
+}
+loadAudioLibrary();
+
+// Preview the selected track (or the URL) in a floating <audio>.
+let audioPreviewEl = null;
+$('videoAudioPreview')?.addEventListener('click', () => {
+  if (audioPreviewEl) { audioPreviewEl.pause(); audioPreviewEl.remove(); audioPreviewEl = null; return; }
+  const src = $('videoAudioUrl').value.trim() || ($('videoAudio').value ? '/audio/' + $('videoAudio').value : '');
+  if (!src) { alert('No audio selected.'); return; }
+  const a = new Audio(src);
+  a.volume = Math.max(0, Math.min(1, Number($('videoVolume').value || 70) / 100));
+  a.play().catch((e) => alert('Preview failed: ' + e.message));
+  audioPreviewEl = a;
+  $('videoAudioPreview').textContent = '⏸ stop';
+  a.onended = () => { $('videoAudioPreview').textContent = '▶ preview'; audioPreviewEl = null; };
+});
+
+// Helper: pack audio-related params from the form into the request body.
+function audioRequestBody() {
+  const pick = $('videoAudio')?.value || '';
+  const url  = $('videoAudioUrl')?.value.trim() || '';
+  return {
+    audio:     url || pick || '',
+    volume:    Number($('videoVolume')?.value  || 70),
+    fadeInMs:  Number($('videoFadeIn')?.value  || 500),
+    fadeOutMs: Number($('videoFadeOut')?.value || 500),
+  };
+}
+
 // Populate the batch-modes multi-select from the single-mode <select>. Keeps
 // labels intact (including optgroup headings as disabled entries for context).
 (function populateBatchModes() {
@@ -1102,6 +1180,7 @@ $('batchGoBtn')?.addEventListener('click', async () => {
     frameMs:   Number($('videoFrameMs').value) || 2500,
     watermark: $('videoWatermark').value,
     silent:    $('batchSilent').checked,
+    ...audioRequestBody(),
     ...(renderAll ? { all: true } : { modes }),
   };
   setBatchRunningUi(true);
@@ -1154,6 +1233,7 @@ $('videoGoBtn')?.addEventListener('click', async () => {
       frameMs:   Number($('videoFrameMs').value) || 2500,
       watermark: $('videoWatermark').value,
       style:     $('videoStyle').value,
+      ...audioRequestBody(),
     });
     const isMp4 = /\.mp4$/i.test(r.file);
     $('videoStatus').innerHTML = '✓ <a href="/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ', ' + r.frames + ' frames' + (isMp4 ? '' : ' — install ffmpeg for mp4') + ')';
