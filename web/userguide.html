@@ -734,8 +734,223 @@ PORT=8090 node src/server.js</code></pre>
   <li><strong>Delete</strong> — the <em>Delete</em> button removes <code>presets/&lt;name&gt;.json</code> from disk.</li>
 </ul>
 
-<h3>Bundled presets</h3>
-<p>Fourteen presets ship with the repo — <code>bit-playground</code>, <code>debug</code>, <code>docs-site</code>, <code>github-pages-portfolio</code>, <code>hardware-pairing</code>, <code>landing-page</code>, <code>login-flow</code>, <code>minimal</code>, <code>modal-stress</code>, <code>spa-tabs</code>, etc. Browse <code>presets/</code> in the repo for concrete real-world configs.</p>
+<h3>Bundled presets — every one, annotated</h3>
+<p>14 presets ship with the repo under <code>presets/</code>. Each one is a fully-working starting point — copy the pattern you want, edit <code>name</code>/<code>url</code>, done.</p>
+
+<div class="compare">
+  <div><h4>📄 minimal</h4><ul>
+    <li>Simplest possible — <em>name</em> + <em>url</em> + <em>autoButtons</em></li>
+    <li>Falls back to 200-page BFS and default blocklist</li>
+    <li><strong>Use when</strong> you want a quick sweep with zero config</li>
+  </ul></div>
+
+  <div><h4>🎯 landing-page</h4><ul>
+    <li>One hero shot of a marketing page</li>
+    <li>Dismisses <em>Accept / Accept all / I agree</em> cookie banners</li>
+    <li><code>maxPages: 1</code>, no clicks, no link-following</li>
+    <li><strong>Use when</strong> you just want a promo hero shot</li>
+  </ul></div>
+
+  <div><h4>🗂️ spa-tabs</h4><ul>
+    <li>Tab buttons by stable ID: <code>#tab-overview</code>, <em>settings</em>, <em>billing</em>, <em>help</em></li>
+    <li><code>clickMode: independent</code> — every tab captured fresh</li>
+    <li><strong>Use when</strong> you have known tab IDs and want one shot per tab</li>
+  </ul></div>
+
+  <div><h4>🌀 spa-tour</h4><ul>
+    <li>Generic React/Vue/Svelte app</li>
+    <li>autoButtons + widened blocklist (+ submit, publish)</li>
+    <li>Cap at 60 buttons, independent mode</li>
+    <li><strong>Use when</strong> you don't know the tabs — let autoButtons find them</li>
+  </ul></div>
+
+  <div><h4>🔐 login-flow</h4><ul>
+    <li>fill email + password → click Sign in → <code>waitForURL **/dashboard</code></li>
+    <li>Then autoButtons on the authenticated state</li>
+    <li><strong>Use when</strong> the app is simply behind a login form</li>
+  </ul></div>
+
+  <div><h4>🔐🌀 login-then-explore</h4><ul>
+    <li>login-flow + independent mode + aggressive blocklist (cancel subscription, destroy)</li>
+    <li>preSteps replay on every reload → every variant stays authenticated</li>
+    <li><strong>Use when</strong> you want every dashboard button screenshotted from fresh auth state</li>
+  </ul></div>
+
+  <div><h4>🔌 hardware-pairing</h4><ul>
+    <li>Headful Chromium · <code>pause</code> preStep for manual connect</li>
+    <li><code>waitForSelector #disconnectBtn:visible</code> confirms connection</li>
+    <li>Sequential mode + 1.8 s <code>clickWait</code> so sensor data renders</li>
+    <li><strong>Use when</strong> a real device (BLE / Web Serial) has to pair before capture</li>
+  </ul></div>
+
+  <div><h4>🪟 modal-stress</h4><ul>
+    <li>7-selector comma-separated <em>dismiss</em></li>
+    <li><code>dismissWait: 800</code> for animation tails</li>
+    <li><strong>Use when</strong> a page stacks cookies + welcome + tour + GDPR</li>
+  </ul></div>
+
+  <div><h4>📚 docs-site</h4><ul>
+    <li>Pure BFS, 100 pages cap, 20 s navTimeout</li>
+    <li>No clicks, no interaction</li>
+    <li><strong>Use when</strong> documenting a static docs site (Docusaurus, mdBook, MkDocs)</li>
+  </ul></div>
+
+  <div><h4>🎓 github-pages-portfolio</h4><ul>
+    <li><em>Batch</em> — 3 apps in one config</li>
+    <li>Each project gets its own subfolder</li>
+    <li><strong>Use when</strong> capturing multiple related projects for one showcase</li>
+  </ul></div>
+
+  <div><h4>🐛 debug</h4><ul>
+    <li>Headful + 1.5 s dismissWait + 1.5 s clickWait + autoButtonsMax: 5</li>
+    <li>Slow motion, visible window</li>
+    <li><strong>Use when</strong> a config behaves wrong — watch it live before full run</li>
+  </ul></div>
+
+  <div><h4>🎮 bit-playground</h4><ul>
+    <li>Real-world reference config</li>
+    <li>Dismiss intro · preStep <em>expert mode</em> · autoButtons + emoji blocklist</li>
+    <li><strong>Use when</strong> you need a template that mixes preSteps + autoButtons + blocklist</li>
+  </ul></div>
+
+  <div><h4>🎮 bit-playground-tabs</h4><ul>
+    <li>Same 8 tab IDs as the hardware-pairing preset, but no device</li>
+    <li>Headless, sequential, no pause</li>
+    <li><strong>Use when</strong> you want a UI tour without wiring hardware</li>
+  </ul></div>
+
+  <div><h4>🎮 bit-playground-simulated</h4><ul>
+    <li>Uses the app's built-in test mode — no physical device</li>
+    <li>Demonstrates <code>selectOption</code> preStep (pick dropdown value)</li>
+    <li><strong>Use when</strong> a page has a simulator you can flip on in UI</li>
+  </ul></div>
+</div>
+
+<h3>Concrete patterns worth stealing</h3>
+
+<h4>1. Pure capture — no interaction</h4>
+<pre><code>{
+  "apps": [{
+    "name": "landing-page",
+    "url": "https://example.com",
+    "dismiss": "button:has-text(\"Accept\"), button:has-text(\"Accept all\"), button:has-text(\"I agree\")",
+    "maxPages": 1
+  }]
+}</code></pre>
+
+<h4>2. Known tabs, each captured fresh</h4>
+<pre><code>{
+  "apps": [{
+    "name": "tabbed-app",
+    "url": "http://localhost:3000",
+    "dismiss": "button:has-text(\"Got it\")",
+    "clickMode": "independent",
+    "maxPages": 1,
+    "clicks": ["#tab-overview", "#tab-settings", "#tab-billing", "#tab-help"]
+  }]
+}</code></pre>
+
+<h4>3. Authenticate, then auto-explore</h4>
+<pre><code>{
+  "apps": [{
+    "name": "app-behind-login",
+    "url": "https://app.example.com/login",
+    "preSteps": [
+      { "action": "fill",       "selector": "input[name=email]",    "value": "demo@example.com" },
+      { "action": "fill",       "selector": "input[name=password]", "value": "hunter2" },
+      { "action": "click",      "selector": "button:has-text(\"Sign in\")" },
+      { "action": "waitForURL", "value": "**/dashboard" }
+    ],
+    "dismiss": "button:has-text(\"Got it\"), [aria-label=\"Close tour\"]",
+    "autoButtons": true,
+    "autoButtonsBlocklist": "delete|remove|clear|reset|logout|sign.?out|cancel subscription|destroy|pay",
+    "clickMode": "independent",
+    "maxPages": 1
+  }]
+}</code></pre>
+<div class="tip">Because <code>clickMode: independent</code> reloads the page between clicks, <code>preSteps</code> (login) replays each time. Every variant is authenticated from fresh state.</div>
+
+<h4>4. Manual-connect hardware, then tab-tour</h4>
+<pre><code>{
+  "apps": [{
+    "name": "bit-playground-connected",
+    "url": "https://abourdim.github.io/bit-playground/",
+    "headful": true,
+    "dismiss": "button:has-text(\"Let's Go\")",
+    "preSteps": [
+      { "action": "click",           "selector": "button:has-text(\"Expert\")" },
+      { "action": "pause",           "value": "Click Connect in the page, pair your micro:bit, then click Resume here." },
+      { "action": "waitForSelector", "selector": "#disconnectBtn:visible", "timeout": 30000 },
+      { "action": "wait",            "value": 1500 }
+    ],
+    "clickMode": "sequential",
+    "clickWait": 1800,
+    "maxPages": 1,
+    "clicks": ["#controlsTabBtn", "#sensesTabBtn", "#servosTabBtn", "#gamepadTabBtn",
+               "#graphTabBtn", "#board3dTabBtn", "#benchTabBtn", "#othersTabBtn"]
+  }]
+}</code></pre>
+<div class="tip">Key ingredients: <code>headful: true</code> so you can see the pair dialog, <code>pause</code> preStep so route-shot waits for you to click Resume, <code>waitForSelector</code> confirms the device is actually connected before snapshotting.</div>
+
+<h4>5. Batch many projects</h4>
+<pre><code>{
+  "apps": [
+    { "name": "bit-playground", "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")", "autoButtons": true, "maxPages": 1 },
+    { "name": "face-quest",     "url": "https://abourdim.github.io/face-quest/",
+      "autoButtons": true, "maxPages": 5 },
+    { "name": "noor-cast",      "url": "https://abourdim.github.io/noor-cast/",
+      "autoButtons": true, "maxPages": 5 }
+  ]
+}</code></pre>
+<p>Each app writes to <code>screenshots/&lt;name&gt;/</code> — no cross-contamination. Top-level <code>screenshots/index.json</code> rolls up counts across all apps.</p>
+
+<h4>6. Flip a UI simulator on before capture</h4>
+<pre><code>{
+  "apps": [{
+    "name": "bit-playground-simulated",
+    "url": "https://abourdim.github.io/bit-playground/",
+    "dismiss": "button:has-text(\"Let's Go\")",
+    "preSteps": [
+      { "action": "click",        "selector": "#expertModeBtn" },
+      { "action": "click",        "selector": "#othersTabBtn" },
+      { "action": "selectOption", "selector": "#otherModeSelect", "value": "test1" },
+      { "action": "wait",         "value": 1500 }
+    ],
+    "clickMode": "sequential",
+    "maxPages": 1,
+    "clicks": ["#controlsTabBtn", "#sensesTabBtn", "#servosTabBtn"]
+  }]
+}</code></pre>
+<div class="tip"><code>selectOption</code> is the preStep action for <code>&lt;select&gt;</code> dropdowns — simpler than two clicks (to open, to pick).</div>
+
+<h3>Where presets live on disk</h3>
+<pre><code>route-shot/
+├── presets/
+│   ├── minimal.json
+│   ├── landing-page.json
+│   ├── spa-tabs.json
+│   ├── spa-tour.json
+│   ├── login-flow.json
+│   ├── login-then-explore.json
+│   ├── hardware-pairing.json
+│   ├── modal-stress.json
+│   ├── docs-site.json
+│   ├── github-pages-portfolio.json
+│   ├── debug.json
+│   ├── bit-playground.json
+│   ├── bit-playground-tabs.json
+│   ├── bit-playground-simulated.json
+│   └── my-preset.json          <span class="mute">← your saved presets land here</span>
+└── apps.json                   <span class="mute">← current working config</span></code></pre>
+
+<h3>Making your own — conventions worth following</h3>
+<ul>
+  <li><strong>Top-level <code>"_description"</code></strong> is ignored by the crawler but shows up when browsing. Use it — future-you will thank you.</li>
+  <li><strong>One preset = one purpose.</strong> Don't bundle "login flow + tab tour + batch portfolio" into one file. Save three presets; compose by editing apps.json directly when needed.</li>
+  <li><strong>Name it like you'd describe it to a teammate:</strong> <code>login-then-explore</code>, not <code>preset3</code>.</li>
+  <li><strong>Start from an existing preset</strong> and edit — in the dashboard, Load the closest one, tweak, <em>Save as…</em> a new name.</li>
+</ul>
 
 <h2 id="manual">Manual Snapshot Session</h2>
 <p>The dashboard's third panel opens a <strong>headful</strong> Chromium you drive by hand, with a floating 📸 snap widget injected into every page.</p>
