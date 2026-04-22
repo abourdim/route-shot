@@ -56,6 +56,16 @@ async function manualStop() {
 }
 process.on('exit', () => { try { manual.browser?.close(); } catch {} });
 
+// Hide / show the injected snap widget around screenshots so it doesn't
+// appear in the captured image. display:none instead of removing so the
+// element and its event handlers survive to be clicked again.
+async function hideWidget(page) {
+  try { await page.evaluate(() => { const w = document.getElementById('__routeShotWidget'); if (w) w.style.display = 'none'; }); } catch {}
+}
+async function showWidget(page) {
+  try { await page.evaluate(() => { const w = document.getElementById('__routeShotWidget'); if (w) w.style.display = ''; }); } catch {}
+}
+
 // Drain the window.__routeShot.queue the injected widget fills — no network
 // calls from the page to the server, so this works regardless of CORS, mixed
 // content, or sandbox isolation in Playwright chromium.
@@ -76,7 +86,10 @@ async function drainManualQueue() {
       fs.mkdirSync(outDir, { recursive: true });
       const labelPart = String(job.label || '').trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
       const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
-      await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
+      await hideWidget(manual.page);
+      try {
+        await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
+      } finally { await showWidget(manual.page); }
       const currentUrl = manual.page.url();
       const filename = `${manual.appName}/${fname}`;
       // Post the result back into the page so snap() can resolve.
@@ -585,7 +598,10 @@ const server = http.createServer(async (req, res) => {
         fs.mkdirSync(outDir, { recursive: true });
         const labelPart = String(labelRaw).trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
         const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
-        await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
+        await hideWidget(manual.page);
+        try {
+          await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
+        } finally { await showWidget(manual.page); }
         const currentUrl = manual.page.url();
         // GET fallback (image-ping) expects a tiny response — serve a 1x1 GIF
         if (req.method === 'GET') {
