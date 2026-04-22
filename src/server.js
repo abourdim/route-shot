@@ -412,6 +412,66 @@ const server = http.createServer(async (req, res) => {
         const { chromium } = require('playwright');
         manual.browser = await chromium.launch({ headless: false });
         manual.context = await manual.browser.newContext();
+        // Inject a floating 📸 widget + Ctrl/Cmd+Shift+S hotkey into every page
+        // so the user never has to leave the Chromium window to trigger a snap.
+        const dashboardPort = server.address()?.port || PORT;
+        await manual.context.addInitScript({
+          content: `
+            (function() {
+              if (window.top !== window) return;  // only in top frame
+              const API = 'http://localhost:${dashboardPort}/api/manual/snapshot';
+              function snap(label) {
+                return fetch(API, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ label: label || '' }),
+                  mode: 'cors',
+                }).then(r => r.json()).catch(e => ({ error: e.message }));
+              }
+              function flash(msg, ok) {
+                const b = document.createElement('div');
+                b.textContent = msg;
+                b.style.cssText = 'position:fixed;top:60px;right:16px;z-index:2147483647;padding:8px 14px;background:' +
+                  (ok?'#1a7f38':'#8a1f1f') + ';color:#fff;font:13px/1.4 system-ui;border-radius:4px;' +
+                  'box-shadow:0 4px 12px rgba(0,0,0,0.4);pointer-events:none;opacity:0.95;';
+                document.documentElement.appendChild(b);
+                setTimeout(() => b.remove(), 2200);
+              }
+              function setup() {
+                if (document.getElementById('__routeShotWidget')) return;
+                const w = document.createElement('div');
+                w.id = '__routeShotWidget';
+                w.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:2147483647;' +
+                  'display:flex;gap:6px;font:13px/1 system-ui;user-select:none;';
+                const input = document.createElement('input');
+                input.placeholder = 'label (optional)';
+                input.style.cssText = 'padding:8px 10px;border:1px solid #444;background:#222;color:#fff;border-radius:6px;outline:none;';
+                const btn = document.createElement('button');
+                btn.textContent = '📸 Snap';
+                btn.style.cssText = 'padding:8px 14px;border:0;background:#58a6ff;color:#000;font-weight:600;border-radius:6px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+                btn.onclick = async () => {
+                  const r = await snap(input.value);
+                  if (r.error) flash('✗ ' + r.error, false);
+                  else { flash('📸 saved #' + r.count + ' — ' + r.filename, true); input.value = ''; }
+                };
+                w.appendChild(input); w.appendChild(btn);
+                document.documentElement.appendChild(w);
+              }
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setup);
+              } else setup();
+              document.addEventListener('keydown', async (e) => {
+                // Ctrl/Cmd + Shift + S — avoid clashing with browser's native Ctrl+S (save page)
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+                  e.preventDefault();
+                  const r = await snap();
+                  if (r.error) flash('✗ ' + r.error, false);
+                  else flash('📸 saved #' + r.count, true);
+                }
+              }, true);
+            })();
+          `,
+        });
         manual.page    = await manual.context.newPage();
         manual.url     = body.url;
         manual.appName = (body.appName || 'manual').replace(/[^\w.-]/g, '_');
@@ -426,7 +486,12 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { await manualStop(); return json(res, 500, { error: e.message }); }
     }
 
-    if (pathname === '/api/manual/snapshot' && req.method === 'POST') {
+    if (pathname === '/api/manual/snapshot' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+      // CORS — injected widget runs on the target page's origin
+      res.setHeader('Access-Control-Allow-Origin',  '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
       if (!manual.page) return json(res, 400, { error: 'no manual session — start one first' });
       const body = await readBody(req);
       try {
@@ -436,7 +501,6 @@ const server = http.createServer(async (req, res) => {
         const labelPart = (body.label || '').trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
         const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
         await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
-        // also record current URL so the user knows which route the shot is of
         const currentUrl = manual.page.url();
         return json(res, 200, { ok: true, filename: `${manual.appName}/${fname}`, count: manual.count, url: currentUrl });
       } catch (e) { return json(res, 500, { error: e.message }); }
