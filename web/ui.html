@@ -6,19 +6,25 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   :root {
-    --bg: #0f1419; --panel: #161b22; --ink: #e6edf3; --mute: #8b949e;
+    --bg: #0f1419; --panel: #161b22; --ink: #e6edf3; --mute: #aeb6bf;
     --accent: #58a6ff; --good: #3fb950; --warn: #d29922; --bad: #f85149;
     --code-bg: #0d1117; --border: #30363d;
+    --danger-bg: #2a1416; --danger-border: #6a2a2f;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--ink);
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { padding: 16px 24px; border-bottom: 1px solid var(--border);
-    display: flex; gap: 12px; align-items: center; }
+  header { padding: 14px 24px; border-bottom: 1px solid var(--border);
+    display: flex; gap: 12px; align-items: center;
+    position: sticky; top: 0; z-index: 50; background: var(--bg);
+    backdrop-filter: saturate(140%); }
   header h1 { font-size: 18px; margin: 0; }
-  header .status { margin-left: auto; font-size: 13px; color: var(--mute); }
+  header .status { margin-left: auto; font-size: 13px; color: var(--ink);
+    padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--code-bg); }
   .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background: var(--mute); margin-right: 6px; vertical-align: middle; }
+  .status.running { border-color: var(--warn); color: var(--warn); }
   .status.running .dot { background: var(--warn); animation: pulse 1s infinite; }
   .status.idle .dot { background: var(--good); }
   @keyframes pulse { 50% { opacity: 0.3; } }
@@ -30,10 +36,18 @@
     text-transform: uppercase; letter-spacing: 0.5px; }
   .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
   button, .btn { background: var(--bg); color: var(--ink); border: 1px solid var(--border);
-    padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+    padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px;
+    transition: background .12s, border-color .12s, color .12s; }
   button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); color: #000; border-color: var(--accent); }
-  button.danger { color: var(--bad); border-color: #4a1f1f; }
+  button.primary { background: var(--accent); color: #000; border-color: var(--accent);
+    font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); }
+  button.ghost { color: var(--mute); }
+  button.ghost:hover { color: var(--ink); border-color: var(--mute); }
+  button.danger { color: var(--bad); border-color: var(--danger-border);
+    background: var(--danger-bg); }
+  button.danger:hover { background: var(--bad); color: #fff; border-color: var(--bad); }
+  .btn-spacer { flex: 1 1 auto; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   input[type=text], textarea {
     background: var(--code-bg); border: 1px solid var(--border); color: var(--ink);
@@ -70,7 +84,15 @@
   .lightbox .lb-body { flex: 1; overflow: auto; text-align: center; padding: 16px; }
   .lightbox img { max-width: none; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
   .lightbox.fit img { max-width: 100%; height: auto; }
-  .muted { color: var(--mute); font-size: 12px; }
+  .muted { color: var(--mute); font-size: 12.5px; }
+  /* push destructive buttons to the far end of a row to separate from primaries */
+  .row > button.danger { margin-left: auto; }
+  .row > button.danger + button.danger { margin-left: 6px; }
+  /* section-header pill: tighter contrast when it carries a value */
+  details.section > summary .summary-tag {
+    background: var(--code-bg); padding: 1px 8px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: 11px;
+  }
   a { color: var(--accent); }
   footer { padding: 12px 24px; color: var(--mute); font-size: 12px; border-top: 1px solid var(--border); }
   .save-hint { color: var(--mute); font-size: 12px; }
@@ -138,6 +160,62 @@
   details.panel-collapse > summary .summary-tag { margin-left: auto; color: var(--mute);
     font-size: 11px; font-weight: normal; text-transform: none; letter-spacing: 0; }
   details.panel-collapse > .panel-body { padding: 0 16px 14px; }
+
+  /* Shot-chip picker (thumbnail grid) — mirrors hidden <select multiple> */
+  .chip-grid { display: grid; gap: 6px; flex: 1;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    max-height: 280px; overflow-y: auto;
+    padding: 6px; background: var(--code-bg);
+    border: 1px solid var(--border); border-radius: 5px; }
+  .shot-chip { position: relative; cursor: pointer; border-radius: 4px;
+    border: 2px solid transparent; overflow: hidden; background: var(--bg); }
+  .shot-chip img { width: 100%; height: 60px; object-fit: cover; display: block; }
+  .shot-chip .lbl { padding: 2px 4px; font-size: 10px; color: var(--mute);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: "Cascadia Mono", Consolas, monospace; }
+  .shot-chip.sel { border-color: var(--accent); }
+  .shot-chip.sel .lbl { color: var(--accent); }
+  .shot-chip .badge { position: absolute; top: 2px; right: 2px;
+    background: var(--accent); color: #000; font-size: 10px; font-weight: 600;
+    padding: 1px 5px; border-radius: 8px; display: none; }
+  .shot-chip.sel .badge { display: block; }
+  .chip-hidden { position: absolute !important; width: 1px; height: 1px;
+    opacity: 0; pointer-events: none; }
+
+  /* Mode-card picker — same toggle mechanics, text-only cards */
+  .mode-grid { display: grid; gap: 6px; flex: 1;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    max-height: 280px; overflow-y: auto;
+    padding: 6px; background: var(--code-bg);
+    border: 1px solid var(--border); border-radius: 5px; }
+  .mode-card { cursor: pointer; padding: 6px 8px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--bg); }
+  .mode-card:hover { border-color: var(--mute); }
+  .mode-card.sel { border-color: var(--accent); background: rgba(88, 166, 255, 0.08); }
+  .mode-card .mc-name { font-weight: 600; font-size: 12px; color: var(--ink); }
+  .mode-card.sel .mc-name { color: var(--accent); }
+  .mode-card .mc-desc { font-size: 11px; color: var(--mute); margin-top: 2px;
+    line-height: 1.3; }
+  .mode-card .mc-group { font-size: 10px; color: var(--mute);
+    text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.7; }
+
+  /* Export tabs — pure CSS via :checked radios */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 6px 0 14px; }
+  .tabs input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+  .tabs label { padding: 8px 14px; cursor: pointer; border: 1px solid transparent;
+    border-bottom: none; border-radius: 6px 6px 0 0; color: var(--mute);
+    font-size: 13px; margin-bottom: -1px; }
+  .tabs label:hover { color: var(--ink); }
+  .tab-panel { display: none; }
+  #tab-promo:checked   ~ .tab-body #panel-promo,
+  #tab-gallery:checked ~ .tab-body #panel-gallery,
+  #tab-video:checked   ~ .tab-body #panel-video { display: block; }
+  #tab-promo:checked   ~ .tabs label[for=tab-promo],
+  #tab-gallery:checked ~ .tabs label[for=tab-gallery],
+  #tab-video:checked   ~ .tabs label[for=tab-video] {
+    color: var(--accent); border-color: var(--border);
+    background: var(--panel); border-bottom-color: var(--panel);
+  }
 
   /* JSON modal */
   .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200;
@@ -274,6 +352,12 @@
     </details>
   </section>
 
+  <section class="panel" style="grid-column: 1 / -1;">
+    <h2>Screenshots <span class="muted" id="shotCount"></span></h2>
+    <div id="indexes"></div>
+    <div class="gallery" id="gallery"></div>
+  </section>
+
   <details class="panel-collapse" style="grid-column: 1 / -1;">
     <summary>
       <span>📸 Manual snapshot session</span>
@@ -346,6 +430,16 @@
         Render share-ready assets from your screenshots. Promo PNGs for Twitter/IG/YouTube, a self-contained gallery HTML, a PDF handout, and a slideshow MP4 for Reels/Feed.
       </p>
 
+      <input type="radio" name="exportTab" id="tab-promo">
+      <input type="radio" name="exportTab" id="tab-gallery">
+      <input type="radio" name="exportTab" id="tab-video" checked>
+      <div class="tabs">
+        <label for="tab-promo">🖼️ Promo PNG</label>
+        <label for="tab-gallery">📄 Gallery + PDF</label>
+        <label for="tab-video">🎬 Slideshow video</label>
+      </div>
+      <div class="tab-body">
+      <section class="tab-panel" id="panel-promo">
       <h3 style="margin: 8px 0 4px; font-size: 14px;">Promo PNG</h3>
       <div class="row">
         <select id="promoShot" style="flex: 2;"><option value="">(pick a screenshot)</option></select>
@@ -379,7 +473,9 @@
         <button id="promoGoBtn" class="primary">Render PNG</button>
       </div>
       <div id="promoStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+      </section>
 
+      <section class="tab-panel" id="panel-gallery">
       <h3 style="margin: 14px 0 4px; font-size: 14px;">Gallery HTML + PDF</h3>
       <div class="row">
         <select id="exportApp" style="flex: 1;"><option value="">(pick an app folder)</option></select>
@@ -388,7 +484,9 @@
         <button id="pdfGoBtn">Export PDF</button>
       </div>
       <div id="galleryStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+      </section>
 
+      <section class="tab-panel" id="panel-video">
       <h3 style="margin: 14px 0 4px; font-size: 14px;">Slideshow video (Reel / Feed / YouTube)</h3>
       <div class="row">
         <select id="videoApp" style="flex: 1;"><option value="">(all screenshots in app folder)</option></select>
@@ -466,13 +564,17 @@
       </div>
       <div class="row" style="align-items: flex-start;">
         <label class="muted" style="font-size: 12px; padding-top: 6px; min-width: 92px;">Pick shots<br><span style="opacity:0.7;">(Ctrl/Shift)</span></label>
-        <select id="videoShots" multiple size="6" style="flex: 1; font-size: 12px; font-family: monospace;"></select>
+        <select id="videoShots" multiple size="6" class="chip-hidden"></select>
+        <div id="videoShotsChips" class="chip-grid"></div>
         <div style="display: flex; flex-direction: column; gap: 4px;">
           <button id="videoShotsAll" type="button" style="font-size: 11px;">Select all</button>
           <button id="videoShotsNone" type="button" style="font-size: 11px;">Clear</button>
           <span class="muted" style="font-size: 11px;" id="videoShotsHint">or leave empty → use app folder</span>
         </div>
       </div>
+      <div id="videoPreflight" class="muted" style="font-size: 12px; padding: 8px 10px;
+           background: var(--code-bg); border: 1px solid var(--border);
+           border-radius: 5px; margin-top: 6px; font-family: 'Cascadia Mono', Consolas, monospace;"></div>
       <div id="videoStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
 
       <!-- Batch render: one video per mode, side-by-side compare page at the end. -->
@@ -481,7 +583,8 @@
           <label class="muted" style="font-size: 12px; padding-top: 6px; min-width: 92px;">
             Test modes<br><span style="opacity:0.7;">(batch)</span>
           </label>
-          <select id="batchModes" multiple size="6" style="flex: 1; font-size: 12px; font-family: monospace;"></select>
+          <select id="batchModes" multiple size="6" class="chip-hidden"></select>
+          <div id="batchModesCards" class="mode-grid"></div>
           <div style="display: flex; flex-direction: column; gap: 4px;">
             <button id="batchModesAll"  type="button" style="font-size: 11px;">Select all</button>
             <button id="batchModesNone" type="button" style="font-size: 11px;">Clear</button>
@@ -500,14 +603,11 @@
         </div>
         <div id="batchStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
       </div>
+      </section>
+      </div>
     </div>
   </details>
 
-  <section class="panel" style="grid-column: 1 / -1;">
-    <h2>Screenshots <span class="muted" id="shotCount"></span></h2>
-    <div id="indexes"></div>
-    <div class="gallery" id="gallery"></div>
-  </section>
 </main>
 
 <!-- JSON modal -->
@@ -962,14 +1062,73 @@ function populateExportPickers() {
       shotsMulti.appendChild(o);
     });
   }
+  renderShotsChips();
+}
+
+// Render thumbnail chips mirroring the hidden <select id="videoShots">.
+// Clicking a chip toggles the matching <option>.selected so existing consumers
+// (which read selectedOptions) keep working unchanged.
+function renderShotsChips() {
+  const sel = $('videoShots'), grid = $('videoShotsChips');
+  if (!sel || !grid) return;
+  grid.innerHTML = '';
+  [...sel.options].forEach((opt) => {
+    const chip = document.createElement('div');
+    chip.className = 'shot-chip' + (opt.selected ? ' sel' : '');
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.src = '/screenshots/' + encodeURI(opt.value);
+    const lbl = document.createElement('div'); lbl.className = 'lbl';
+    lbl.textContent = opt.value.split('/').pop();
+    const badge = document.createElement('div'); badge.className = 'badge'; badge.textContent = '✓';
+    chip.append(img, badge, lbl);
+    chip.addEventListener('click', () => {
+      opt.selected = !opt.selected;
+      chip.classList.toggle('sel', opt.selected);
+      if (typeof updatePreflight === 'function') updatePreflight();
+    });
+    grid.appendChild(chip);
+  });
 }
 
 $('videoShotsAll')?.addEventListener('click', () => {
   [...$('videoShots').options].forEach((o) => o.selected = true);
+  renderShotsChips(); updatePreflight();
 });
 $('videoShotsNone')?.addEventListener('click', () => {
   [...$('videoShots').options].forEach((o) => o.selected = false);
+  renderShotsChips(); updatePreflight();
 });
+
+// Live pre-flight summary: what will Render video produce right now?
+function updatePreflight() {
+  const el = $('videoPreflight'); if (!el) return;
+  const shotsMulti = $('videoShots');
+  const picked = shotsMulti ? [...shotsMulti.selectedOptions].length : 0;
+  const total  = shotsMulti ? shotsMulti.options.length : 0;
+  const fmt    = $('videoFormat')?.selectedOptions[0]?.textContent || '—';
+  const style  = $('videoStyle')?.selectedOptions[0]?.textContent.split('—')[0].trim() || '—';
+  const ms     = Number($('videoFrameMs')?.value) || 0;
+  const app    = $('videoApp')?.value;
+  const count  = picked || (app ? '(all in ' + app + ')' : total);
+  const durSec = picked ? (picked * ms / 1000).toFixed(1)
+                        : (app ? '~' + (total * ms / 1000).toFixed(0) : '—');
+  const audioPick = $('videoAudio')?.value || '';
+  const audioUrl  = $('videoAudioUrl')?.value.trim() || '';
+  const audio = audioUrl ? '🎵 url' : (audioPick ? '🎵 ' + audioPick.split('/').pop() : '🔇 silent');
+  const wm = $('videoWatermark')?.value.trim();
+  el.innerHTML = `▶ ${count} shot${picked === 1 ? '' : 's'} · ${style} · ${ms} ms/frame` +
+                 ` · ~${durSec}s · ${fmt} · ${audio}` +
+                 (wm ? ` · wm:"${wm}"` : '');
+}
+// Hook all inputs that influence the summary.
+['videoFormat','videoStyle','videoFrameMs','videoApp','videoAudio','videoAudioUrl',
+ 'videoWatermark','videoShots'].forEach((id) => {
+  const el = $(id); if (!el) return;
+  el.addEventListener('change', updatePreflight);
+  el.addEventListener('input', updatePreflight);
+});
+document.addEventListener('DOMContentLoaded', updatePreflight);
+setTimeout(updatePreflight, 300);  // after galleryFiles arrives
 
 async function postJson(url, body) {
   const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -1115,13 +1274,46 @@ function audioRequestBody() {
       dst.appendChild(node.cloneNode(true));
     }
   }
+  renderBatchModeCards();
 })();
+
+// Render mode cards mirroring the hidden <select id="batchModes">. Each option's
+// text is of the form "name — description". Disabled options are group headers.
+function renderBatchModeCards() {
+  const sel = $('batchModes'), grid = $('batchModesCards');
+  if (!sel || !grid) return;
+  grid.innerHTML = '';
+  let currentGroup = '';
+  [...sel.options].forEach((opt) => {
+    if (opt.disabled) {
+      currentGroup = opt.textContent.replace(/[─\s]/g, '');
+      return;
+    }
+    const [name, ...descParts] = opt.textContent.split('—');
+    const card = document.createElement('div');
+    card.className = 'mode-card' + (opt.selected ? ' sel' : '');
+    const g = document.createElement('div'); g.className = 'mc-group';
+    g.textContent = currentGroup;
+    const n = document.createElement('div'); n.className = 'mc-name';
+    n.textContent = name.trim();
+    const d = document.createElement('div'); d.className = 'mc-desc';
+    d.textContent = descParts.join('—').trim();
+    card.append(g, n, d);
+    card.addEventListener('click', () => {
+      opt.selected = !opt.selected;
+      card.classList.toggle('sel', opt.selected);
+    });
+    grid.appendChild(card);
+  });
+}
 
 $('batchModesAll') ?.addEventListener('click', () => {
   [...$('batchModes').options].forEach((o) => { if (!o.disabled) o.selected = true; });
+  renderBatchModeCards();
 });
 $('batchModesNone')?.addEventListener('click', () => {
   [...$('batchModes').options].forEach((o) => o.selected = false);
+  renderBatchModeCards();
 });
 
 // Cancel the batch poll interval when the page unloads.
