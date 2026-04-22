@@ -148,9 +148,18 @@ async function captureUrl(page, url, idx, cfg, outDir) {
   const clicks  = toList(cfg.clicks);
   const mode    = cfg.clickMode || 'sequential';
 
-  const resp   = await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
-  const status = resp ? resp.status() : 0;
-  await dismissAll(page, dismiss, cfg.dismissWait);
+  // If crawlApp already did goto + dismiss + preSteps for this URL (sets
+  // cfg._skipNextGoto), DO NOT re-navigate — that would kill any live state
+  // like a Web Serial / BLE connection. Subsequent BFS pages re-navigate
+  // normally because they're a different URL.
+  let status = 200;
+  if (cfg._skipNextGoto) {
+    cfg._skipNextGoto = false;     // only skip this once
+  } else {
+    const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
+    status = resp ? resp.status() : 0;
+    await dismissAll(page, dismiss, cfg.dismissWait);
+  }
 
   const baseSlug = slugify(url);
   const filename = `${String(idx).padStart(3, '0')}_${baseSlug}.png`;
@@ -374,6 +383,9 @@ async function crawlApp(browser, app) {
       await dismissAll(page, toList(cfg.dismiss), cfg.dismissWait);
       await runSteps(page, cfg.preSteps, cfg.navTimeout);
       console.log(`  preSteps: ${cfg.preSteps.length} step(s) completed`);
+      // Tell the next captureUrl call to NOT re-goto — we're already on the
+      // page with all setup done (and possibly a live device connection).
+      cfg._skipNextGoto = true;
     } catch (e) {
       console.error(`  preSteps failed: ${e.message}`);
     }
