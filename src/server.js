@@ -652,9 +652,11 @@ function listenWithFallback(startPort, attempt = 0) {
       process.exit(1);
     }
   });
-  // Bind to 0.0.0.0 so both IPv4 (127.0.0.1) and IPv6 loopback (::1) route
-  // correctly — dual-stack default doesn't always accept IPv4 on Windows.
-  server.listen(p, '0.0.0.0', () => {
+  // Default bind (dual-stack) — explicit 0.0.0.0 triggers EACCES on
+  // Windows for ports in excluded ranges (Hyper-V / WSL reservations).
+  // The injected widget retries multiple host aliases client-side, so
+  // dual-stack is good enough.
+  server.listen(p, () => {
     console.log(`route-shot dashboard  →  http://localhost:${p}`);
   });
 }
