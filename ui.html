@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>route-shot dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161b22; --ink: #e6edf3; --mute: #8b949e;
+    --accent: #58a6ff; --good: #3fb950; --warn: #d29922; --bad: #f85149;
+    --code-bg: #0d1117; --border: #30363d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; gap: 12px; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .status { margin-left: auto; font-size: 13px; color: var(--mute); }
+  .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--mute); margin-right: 6px; vertical-align: middle; }
+  .status.running .dot { background: var(--warn); animation: pulse 1s infinite; }
+  .status.idle .dot { background: var(--good); }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; }
+  .panel h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+  button, .btn { background: var(--bg); color: var(--ink); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  button.danger { color: var(--bad); border-color: #4a1f1f; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  input[type=text], textarea {
+    background: var(--code-bg); border: 1px solid var(--border); color: var(--ink);
+    padding: 6px 10px; border-radius: 4px; font: 13px/1.4 "Cascadia Mono", Consolas, monospace;
+    width: 100%;
+  }
+  textarea { resize: vertical; min-height: 280px; white-space: pre; tab-size: 2; }
+  .logs { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px; font: 12px/1.4 "Cascadia Mono", Consolas, monospace;
+    height: 300px; overflow-y: auto; white-space: pre-wrap; color: var(--ink); }
+  .logs .err { color: var(--bad); }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px; margin-top: 10px; max-height: 520px; overflow-y: auto; padding-right: 4px; }
+  .gallery a { display: block; background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 4px; overflow: hidden; }
+  .gallery img { width: 100%; height: 120px; object-fit: cover; display: block; }
+  .gallery .name { padding: 4px 6px; font-size: 11px; color: var(--mute);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .muted { color: var(--mute); font-size: 12px; }
+  a { color: var(--accent); }
+  footer { padding: 12px 24px; color: var(--mute); font-size: 12px; border-top: 1px solid var(--border); }
+  .save-hint { color: var(--mute); font-size: 12px; }
+  .save-hint.dirty { color: var(--warn); }
+  .save-hint.saved { color: var(--good); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>route-shot</h1>
+  <a href="/userguide.html" target="_blank" class="muted">user guide →</a>
+  <div class="status idle" id="status"><span class="dot"></span><span id="statusText">idle</span></div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Run</h2>
+    <div class="row">
+      <input type="text" id="singleUrl" placeholder="https://example.com">
+      <button id="runSingle">Crawl single URL</button>
+    </div>
+    <div class="row">
+      <button id="runBatch" class="primary">Run batch (apps.json)</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <button id="cleanBtn" class="danger">Clean screenshots</button>
+    </div>
+    <div class="logs" id="logs"></div>
+  </section>
+
+  <section class="panel">
+    <h2>apps.json</h2>
+    <textarea id="appsEditor" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="saveApps" class="primary">Save</button>
+      <button id="reloadApps">Reload</button>
+      <button id="formatApps">Format</button>
+      <span class="save-hint" id="saveHint">loaded</span>
+    </div>
+    <details style="margin-top: 10px;">
+      <summary class="muted">Import DevTools Recorder JSON</summary>
+      <div class="row" style="margin-top: 10px;">
+        <input type="text" id="impName" placeholder="App name (optional)" style="flex: 1;">
+        <label class="muted"><input type="checkbox" id="impAsClicks" checked> as-clicks mode</label>
+      </div>
+      <textarea id="impRec" placeholder="Paste the Recorder JSON export here…" style="min-height: 140px; margin-top: 6px;"></textarea>
+      <div class="row">
+        <button id="impBtn">Import + merge into apps.json</button>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" style="grid-column: 1 / -1;">
+    <h2>Screenshots <span class="muted" id="shotCount"></span></h2>
+    <div class="gallery" id="gallery"></div>
+  </section>
+</main>
+
+<footer>
+  route-shot dashboard · <a href="https://github.com/abourdim/route-shot" target="_blank">github</a>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let lastLogTs = 0;
+let polling = false;
+
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+function appendLog(entries) {
+  if (!entries || !entries.length) return;
+  const box = $('logs');
+  for (const e of entries) {
+    const div = document.createElement('div');
+    if (/\[stderr\]|Error|✗|failed/i.test(e.line)) div.className = 'err';
+    div.textContent = e.line;
+    box.appendChild(div);
+    lastLogTs = Math.max(lastLogTs, e.ts);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function setStatus(running, exit) {
+  const el = $('status');
+  el.className = 'status ' + (running ? 'running' : 'idle');
+  $('statusText').textContent = running
+    ? 'running' + (run.command ? ` — ${run.command}` : '')
+    : (exit !== null && exit !== undefined ? `idle (last exit: ${exit})` : 'idle');
+  $('stopBtn').disabled = !running;
+  $('runSingle').disabled = running;
+  $('runBatch').disabled = running;
+  $('cleanBtn').disabled = running;
+}
+
+const run = { command: null };
+
+async function pollLogs() {
+  if (polling) return;
+  polling = true;
+  try {
+    const r = await fetchJSON('/api/logs?since=' + lastLogTs);
+    appendLog(r.entries);
+    if (r.running) setStatus(true, null);
+    else setStatus(false, r.exit);
+    if (!r.running) {
+      // one final refresh of the gallery
+      loadGallery();
+    }
+  } catch (e) {}
+  polling = false;
+}
+
+setInterval(pollLogs, 800);
+
+async function loadApps() {
+  const r = await fetchJSON('/api/apps');
+  $('appsEditor').value = JSON.stringify(r, null, 2);
+  markSaved('loaded');
+}
+
+function markDirty() {
+  const h = $('saveHint');
+  h.textContent = 'unsaved';
+  h.className = 'save-hint dirty';
+}
+function markSaved(msg) {
+  const h = $('saveHint');
+  h.textContent = msg || 'saved';
+  h.className = 'save-hint saved';
+}
+
+$('appsEditor').addEventListener('input', markDirty);
+
+$('reloadApps').onclick = loadApps;
+$('formatApps').onclick = () => {
+  try {
+    const v = JSON.parse($('appsEditor').value);
+    $('appsEditor').value = JSON.stringify(v, null, 2);
+    markDirty();
+  } catch (e) {
+    alert('Invalid JSON: ' + e.message);
+  }
+};
+$('saveApps').onclick = async () => {
+  let body;
+  try { body = JSON.parse($('appsEditor').value); }
+  catch (e) { alert('Invalid JSON: ' + e.message); return; }
+  const r = await fetchJSON('/api/apps', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (r.error) { alert(r.error); return; }
+  markSaved('saved ✓');
+};
+
+$('runSingle').onclick = async () => {
+  const url = $('singleUrl').value.trim();
+  if (!url) return;
+  $('logs').innerHTML = '';
+  lastLogTs = 0;
+  run.command = 'single';
+  const r = await fetchJSON('/api/run/single', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (r.error) alert(r.error);
+};
+
+$('runBatch').onclick = async () => {
+  $('logs').innerHTML = '';
+  lastLogTs = 0;
+  run.command = 'batch';
+  const r = await fetchJSON('/api/run/batch', { method: 'POST' });
+  if (r.error) alert(r.error);
+};
+
+$('stopBtn').onclick = async () => {
+  await fetchJSON('/api/stop', { method: 'POST' });
+};
+
+$('cleanBtn').onclick = async () => {
+  if (!confirm('Delete all screenshots?')) return;
+  await fetchJSON('/api/clean', { method: 'POST' });
+  loadGallery();
+};
+
+$('impBtn').onclick = async () => {
+  const rec = $('impRec').value.trim();
+  if (!rec) return;
+  try { JSON.parse(rec); } catch (e) { alert('Not valid JSON — did you paste the Puppeteer/Playwright script by mistake?'); return; }
+  const r = await fetchJSON('/api/import-recording', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      recording: rec,
+      name: $('impName').value.trim() || undefined,
+      asClicks: $('impAsClicks').checked,
+    }),
+  });
+  if (r.error) { alert(r.error); return; }
+  appendLog([{ ts: Date.now(), line: r.stdout }]);
+  await loadApps();
+};
+
+async function loadGallery() {
+  const r = await fetchJSON('/api/shots');
+  const g = $('gallery');
+  g.innerHTML = '';
+  $('shotCount').textContent = r.files.length ? `(${r.files.length})` : '';
+  for (const f of r.files) {
+    const a = document.createElement('a');
+    a.href = '/screenshots/' + f;
+    a.target = '_blank';
+    a.innerHTML = `<img src="/screenshots/${f}" loading="lazy"><div class="name">${f}</div>`;
+    g.appendChild(a);
+  }
+}
+
+loadApps();
+loadGallery();
+</script>
+
+</body>
+</html>

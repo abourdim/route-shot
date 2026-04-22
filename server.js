@@ -1,0 +1,231 @@
+#!/usr/bin/env node
+// route-shot web dashboard — zero-dependency Node HTTP server.
+// Run:  node server.js  [port]
+// Open: http://localhost:8080
+
+const http       = require('http');
+const fs         = require('fs');
+const path       = require('path');
+const { spawn }  = require('child_process');
+const { URL }    = require('url');
+
+const PORT     = Number(process.argv[2] || process.env.PORT || 8080);
+const ROOT     = __dirname;
+const CRAWLER  = path.join(ROOT, 'route-shot.js');
+const APPS_CFG = path.join(ROOT, 'apps.json');
+const SHOTS    = path.join(ROOT, 'screenshots');
+
+// --- run state --------------------------------------------------------------
+const run = {
+  proc:    null,
+  logs:    [],        // array of { ts, line }
+  running: false,
+  command: null,
+  exit:    null,
+};
+
+function pushLog(line) {
+  run.logs.push({ ts: Date.now(), line: String(line).replace(/\r/g, '') });
+  if (run.logs.length > 5000) run.logs.splice(0, 1000);
+}
+
+function spawnCrawler(args, label) {
+  if (run.running) return { error: 'a run is already in progress' };
+  run.logs = [];
+  run.running = true;
+  run.command = label;
+  run.exit = null;
+  pushLog(`$ node route-shot.js ${args.join(' ')}`);
+  const proc = spawn(process.execPath, [CRAWLER, ...args], { cwd: ROOT });
+  proc.stdout.on('data', (d) => d.toString().split('\n').forEach((l) => l && pushLog(l)));
+  proc.stderr.on('data', (d) => d.toString().split('\n').forEach((l) => l && pushLog(`[stderr] ${l}`)));
+  proc.on('exit', (code) => {
+    pushLog(`--- exited with code ${code} ---`);
+    run.running = false;
+    run.exit = code;
+    run.proc = null;
+  });
+  run.proc = proc;
+  return { ok: true };
+}
+
+// --- tiny static helpers ----------------------------------------------------
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png':  'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif', '.svg': 'image/svg+xml',
+};
+
+function serveFile(res, filePath, fallbackType) {
+  fs.stat(filePath, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); res.end('404'); return; }
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || fallbackType || 'application/octet-stream' });
+    fs.createReadStream(filePath).pipe(res);
+  });
+}
+
+function safeJoin(base, rel) {
+  const full = path.normalize(path.join(base, decodeURIComponent(rel)));
+  if (!full.startsWith(base)) return null;  // path traversal guard
+  return full;
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}')); }
+      catch (e) { reject(e); }
+    });
+    req.on('error', reject);
+  });
+}
+
+function json(res, status, obj) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
+}
+
+function rmrf(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    const st = fs.lstatSync(p);
+    if (st.isDirectory()) { rmrf(p); fs.rmdirSync(p); }
+    else fs.unlinkSync(p);
+  }
+}
+
+function listShots() {
+  if (!fs.existsSync(SHOTS)) return [];
+  const out = [];
+  const walk = (dir, rel) => {
+    for (const name of fs.readdirSync(dir)) {
+      const p = path.join(dir, name);
+      const st = fs.statSync(p);
+      const relPath = rel ? `${rel}/${name}` : name;
+      if (st.isDirectory()) walk(p, relPath);
+      else if (/\.(png|jpe?g|gif)$/i.test(name)) out.push(relPath);
+    }
+  };
+  walk(SHOTS, '');
+  return out.sort();
+}
+
+// --- routes -----------------------------------------------------------------
+const server = http.createServer(async (req, res) => {
+  const u = new URL(req.url, `http://${req.headers.host}`);
+  const { pathname } = u;
+
+  try {
+    // static: dashboard
+    if (pathname === '/' || pathname === '/index.html') {
+      return serveFile(res, path.join(ROOT, 'ui.html'));
+    }
+    if (pathname === '/userguide.html') {
+      return serveFile(res, path.join(ROOT, 'userguide.html'));
+    }
+
+    // static: screenshots
+    if (pathname.startsWith('/screenshots/')) {
+      const rel = pathname.slice('/screenshots/'.length);
+      const full = safeJoin(SHOTS, rel);
+      if (!full) { res.writeHead(403); res.end(); return; }
+      return serveFile(res, full);
+    }
+
+    // API: status
+    if (pathname === '/api/status' && req.method === 'GET') {
+      return json(res, 200, { running: run.running, command: run.command, exit: run.exit });
+    }
+
+    // API: logs (since?=timestamp)
+    if (pathname === '/api/logs' && req.method === 'GET') {
+      const since = Number(u.searchParams.get('since') || 0);
+      const entries = run.logs.filter((l) => l.ts > since);
+      return json(res, 200, { running: run.running, exit: run.exit, entries });
+    }
+
+    // API: read apps.json
+    if (pathname === '/api/apps' && req.method === 'GET') {
+      if (!fs.existsSync(APPS_CFG)) return json(res, 200, { apps: [] });
+      return json(res, 200, JSON.parse(fs.readFileSync(APPS_CFG, 'utf8')));
+    }
+
+    // API: write apps.json
+    if (pathname === '/api/apps' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!body || !Array.isArray(body.apps)) return json(res, 400, { error: 'expected { apps: [...] }' });
+      fs.writeFileSync(APPS_CFG, JSON.stringify(body, null, 2) + '\n');
+      return json(res, 200, { ok: true });
+    }
+
+    // API: list screenshots
+    if (pathname === '/api/shots' && req.method === 'GET') {
+      return json(res, 200, { files: listShots() });
+    }
+
+    // API: clean screenshots
+    if (pathname === '/api/clean' && req.method === 'POST') {
+      rmrf(SHOTS);
+      return json(res, 200, { ok: true });
+    }
+
+    // API: run single URL
+    if (pathname === '/api/run/single' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!body.url) return json(res, 400, { error: 'url required' });
+      const r = spawnCrawler([body.url], `single: ${body.url}`);
+      return json(res, r.error ? 409 : 200, r);
+    }
+
+    // API: run batch
+    if (pathname === '/api/run/batch' && req.method === 'POST') {
+      if (!fs.existsSync(APPS_CFG)) return json(res, 400, { error: 'apps.json not found' });
+      const r = spawnCrawler(['--batch', 'apps.json'], 'batch: apps.json');
+      return json(res, r.error ? 409 : 200, r);
+    }
+
+    // API: stop
+    if (pathname === '/api/stop' && req.method === 'POST') {
+      if (run.proc) { run.proc.kill('SIGTERM'); return json(res, 200, { ok: true }); }
+      return json(res, 200, { ok: true, nothing: true });
+    }
+
+    // API: import recording (multipart not implemented — accept JSON body)
+    if (pathname === '/api/import-recording' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!body.recording) return json(res, 400, { error: 'recording (raw JSON string) required' });
+      const tmp = path.join(ROOT, `.import-${Date.now()}.json`);
+      fs.writeFileSync(tmp, typeof body.recording === 'string' ? body.recording : JSON.stringify(body.recording));
+      const args = ['--import-recording', tmp, '--merge', 'apps.json'];
+      if (body.name)     args.push('--name', body.name);
+      if (body.asClicks) args.push('--as-clicks');
+      const proc = spawn(process.execPath, [CRAWLER, ...args], { cwd: ROOT });
+      let out = '', err = '';
+      proc.stdout.on('data', (d) => out += d);
+      proc.stderr.on('data', (d) => err += d);
+      proc.on('exit', (code) => {
+        fs.unlinkSync(tmp);
+        if (code === 0) json(res, 200, { ok: true, stdout: out });
+        else json(res, 500, { error: err || out, code });
+      });
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('404');
+  } catch (e) {
+    console.error(e);
+    json(res, 500, { error: String(e.message || e) });
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`route-shot dashboard  →  http://localhost:${PORT}`);
+});

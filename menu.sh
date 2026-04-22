@@ -178,6 +178,26 @@ cmd_open_web() {
     printf "→ Opened %s\n\n" "$url"
 }
 
+cmd_dashboard() {
+    printf "\n${BOLD}Launch web dashboard${NC}\n"
+    if [ ! -f "$SCRIPT_DIR/server.js" ]; then
+        printf "${R}Missing:${NC} %s/server.js\n\n" "$SCRIPT_DIR"
+        return 1
+    fi
+    local port=8080
+    read -r -p "  Port [$port]: " p
+    port="${p:-$port}"
+    cd "$SCRIPT_DIR" || return 1
+    ( nohup node server.js "$port" >/dev/null 2>&1 & echo $! > "$SCRIPT_DIR/.dashboard.pid" )
+    sleep 1
+    local url="http://localhost:$port"
+    printf "\n${G}→ Dashboard at %s${NC}\n\n" "$url"
+    if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
+    elif command -v open >/dev/null 2>&1; then open "$url"
+    elif command -v start >/dev/null 2>&1; then start "$url"
+    fi
+}
+
 cmd_stop_server() {
     if [ -f "$SERVER_PID_FILE" ]; then
         local pid
@@ -223,12 +243,13 @@ menu() {
     printf "  3) Launch route-shot (single URL)\n"
     printf "  4) Batch run (apps.json)\n"
     printf "  5) Import DevTools Recorder → apps.json\n"
-    printf "  6) Start web server      (http://localhost:%s)\n" "$SERVER_PORT"
-    printf "  7) Open in browser\n"
-    printf "  8) Stop web server\n"
-    printf "  9) Open screenshots folder\n"
-    printf " 10) Clean screenshots\n"
-    printf " 11) Exit\n"
+    printf "  6) Launch web dashboard\n"
+    printf "  7) Start static server    (http://localhost:%s)\n" "$SERVER_PORT"
+    printf "  8) Open in browser\n"
+    printf "  9) Stop static server\n"
+    printf " 10) Open screenshots folder\n"
+    printf " 11) Clean screenshots\n"
+    printf " 12) Exit\n"
     printf "\n"
 }
 
@@ -243,12 +264,13 @@ while true; do
         3) cmd_launch ;;
         4) cmd_batch ;;
         5) cmd_import ;;
-        6) cmd_server ;;
-        7) cmd_open_web ;;
-        8) cmd_stop_server ;;
-        9) cmd_open ;;
-        10) cmd_clean ;;
-        11|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
+        6) cmd_dashboard ;;
+        7) cmd_server ;;
+        8) cmd_open_web ;;
+        9) cmd_stop_server ;;
+        10) cmd_open ;;
+        11) cmd_clean ;;
+        12|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
         *) printf "\n${R}Invalid choice.${NC}\n" ;;
     esac
 done
