@@ -7,9 +7,8 @@
       "headful": true,
       "dismiss": "button:has-text(\"Let's Go\")",
       "preSteps": [
-        { "action": "click",           "selector": "button:has-text(\"expert\")" },
-        { "action": "pause",           "value": "Connect your micro:bit (auto if remembered, otherwise click Connect + pair). When the Disconnect button shows, click Resume here." },
-        { "action": "waitForSelector", "selector": "#disconnectBtn:visible", "timeout": 15000 },
+        { "action": "pause",           "value": "Do this in the page: 1) click Expert  2) click Connect + pair your micro:bit  3) wait for the Disconnect button to show  4) click Resume here." },
+        { "action": "waitForSelector", "selector": "#disconnectBtn:visible", "timeout": 30000 },
         { "action": "wait",            "value": 1500 }
       ],
       "clickMode": "sequential",
