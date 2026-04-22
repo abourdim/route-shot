@@ -370,14 +370,13 @@ async function resolveAudioSource(spec) {
       return { ok: true, path: cached };
     } catch (e) { return { ok: false, error: 'download failed: ' + e.message }; }
   }
-  // Relative spec — only allow library/uploads/cache subdirs
-  if (!/^(library|uploads|cache)\/[\w.-]+$/.test(spec)) {
+  // Relative spec — only allow library/uploads/cache subdirs. Filenames may
+  // contain spaces (hence safeJoin + prefix check rather than a tight regex).
+  if (!/^(library|uploads|cache)[\\/]/.test(spec)) {
     return { ok: false, error: 'invalid audio path' };
   }
-  const abs = path.join(ROOT, 'audio', spec);
-  if (!abs.startsWith(path.join(ROOT, 'audio') + path.sep)) {
-    return { ok: false, error: 'path traversal blocked' };
-  }
+  const abs = safeJoin(path.join(ROOT, 'audio'), spec);
+  if (!abs) return { ok: false, error: 'path traversal blocked' };
   if (!fs.existsSync(abs)) return { ok: false, error: 'audio not found: ' + spec };
   return { ok: true, path: abs };
 }
@@ -1345,6 +1344,7 @@ const server = http.createServer(async (req, res) => {
       if (!body.silent && body.audio) {
         const ar = await resolveAudioSource(body.audio);
         if (ar.ok) audioPath = ar.path;
+        else console.warn('[audio] resolve failed for', body.audio, '→', ar.error);
       }
       // Set up the run folder
       const runName = slugName(body.title || outApp) + '_batch_' + stamp();
@@ -1500,6 +1500,7 @@ const server = http.createServer(async (req, res) => {
       if (!body.silent && body.audio) {
         const ar = await resolveAudioSource(body.audio);
         if (ar.ok) audioPath = ar.path;
+        else console.warn('[audio] resolve failed for', body.audio, '→', ar.error);
       }
       // Timestamped run folder under videos/, like galleries/ — each render
       // keeps its own directory with webm/mp4/meta.json.
