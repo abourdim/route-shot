@@ -187,14 +187,35 @@ cmd_dashboard() {
     local port=8080
     read -r -p "  Port [$port]: " p
     port="${p:-$port}"
-    cd "$SCRIPT_DIR" || return 1
-    ( nohup node server.js "$port" >/dev/null 2>&1 & echo $! > "$SCRIPT_DIR/.dashboard.pid" )
-    sleep 1
+
+    # if something is already on this port, reuse it
+    if curl -s -m 1 "http://localhost:$port/api/status" >/dev/null 2>&1; then
+        printf "${Y}Dashboard already running on port %s.${NC}\n" "$port"
+    else
+        cd "$SCRIPT_DIR" || return 1
+        node server.js "$port" > "$SCRIPT_DIR/.dashboard.log" 2>&1 &
+        local pid=$!
+        echo "$pid" > "$SCRIPT_DIR/.dashboard.pid"
+        disown "$pid" 2>/dev/null || true
+        # wait up to 4 seconds for the server to start listening
+        local i=0
+        while [ $i -lt 20 ]; do
+            if curl -s -m 1 "http://localhost:$port/api/status" >/dev/null 2>&1; then break; fi
+            sleep 0.2
+            i=$((i + 1))
+        done
+        if ! curl -s -m 1 "http://localhost:$port/api/status" >/dev/null 2>&1; then
+            printf "${R}Dashboard failed to start.${NC} See %s/.dashboard.log\n\n" "$SCRIPT_DIR"
+            tail -20 "$SCRIPT_DIR/.dashboard.log" 2>/dev/null
+            return 1
+        fi
+    fi
+
     local url="http://localhost:$port"
-    printf "\n${G}→ Dashboard at %s${NC}\n\n" "$url"
+    printf "${G}→ Dashboard at %s${NC}\n\n" "$url"
     if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
     elif command -v open >/dev/null 2>&1; then open "$url"
-    elif command -v start >/dev/null 2>&1; then start "$url"
+    elif command -v start >/dev/null 2>&1; then start "" "$url"
     fi
 }
 
