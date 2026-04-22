@@ -398,6 +398,7 @@
           <option value="feed">Feed 1920×1080</option>
           <option value="youtube">YouTube 1920×1080</option>
         </select>
+        <input type="text" id="videoTitle" placeholder="video title (folder name)" style="flex: 1;">
         <input type="number" id="videoFrameMs" value="2500" min="500" max="10000" step="100" style="width: 90px;" title="ms per frame">
         <select id="videoStyle" title="visual style (32 effects)">
           <optgroup label="Clean">
@@ -954,6 +955,11 @@ $('promoGoBtn')?.addEventListener('click', async () => {
   finally { btn.disabled = false; }
 });
 
+// Gallery/PDF share the last build's run folder so the PDF button can print
+// the same one without having to rebuild (unless the gallery button was
+// clicked again in between).
+let lastGalleryRun = null;
+
 $('galleryGoBtn')?.addEventListener('click', async () => {
   const app = $('exportApp').value;
   if (!app) { alert('Pick an app folder first.'); return; }
@@ -961,7 +967,8 @@ $('galleryGoBtn')?.addEventListener('click', async () => {
   $('galleryStatus').textContent = 'Building…';
   try {
     const r = await postJson('/api/export/gallery', { app, title: $('exportTitle').value });
-    $('galleryStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> — ' + r.count + ' slide(s)';
+    lastGalleryRun = r.run;
+    $('galleryStatus').innerHTML = '✓ <a href="/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> — ' + r.count + ' slide(s)';
   } catch (e) { $('galleryStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
 });
@@ -972,10 +979,11 @@ $('pdfGoBtn')?.addEventListener('click', async () => {
   const btn = $('pdfGoBtn'); btn.disabled = true;
   $('galleryStatus').textContent = 'Printing PDF (building gallery if needed)…';
   try {
-    // Ensure gallery.html exists before printing.
-    await postJson('/api/export/gallery', { app, title: $('exportTitle').value });
-    const r = await postJson('/api/export/pdf', { app });
-    $('galleryStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a>';
+    // Always rebuild so the PDF matches the current screenshots + title.
+    const g = await postJson('/api/export/gallery', { app, title: $('exportTitle').value });
+    lastGalleryRun = g.run;
+    const r = await postJson('/api/export/pdf', { run: g.run });
+    $('galleryStatus').innerHTML = '✓ <a href="/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a>';
   } catch (e) { $('galleryStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
 });
@@ -992,13 +1000,14 @@ $('videoGoBtn')?.addEventListener('click', async () => {
     const r = await postJson('/api/export/video', {
       app,
       shots: shots.length ? shots : undefined,
+      title:     $('videoTitle')?.value || '',
       format:    $('videoFormat').value,
       frameMs:   Number($('videoFrameMs').value) || 2500,
       watermark: $('videoWatermark').value,
       style:     $('videoStyle').value,
     });
     const isMp4 = /\.mp4$/i.test(r.file);
-    $('videoStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ', ' + r.frames + ' frames' + (isMp4 ? '' : ' — install ffmpeg for mp4') + ')';
+    $('videoStatus').innerHTML = '✓ <a href="/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ', ' + r.frames + ' frames' + (isMp4 ? '' : ' — install ffmpeg for mp4') + ')';
   } catch (e) { $('videoStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
 });

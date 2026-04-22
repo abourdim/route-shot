@@ -30,6 +30,8 @@ npm-debug.log*
 # outputs
 screenshots/
 screenshots.*/
+galleries/
+videos/
 *.json.bak
 
 # recordings

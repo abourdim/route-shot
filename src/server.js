@@ -19,6 +19,23 @@ const HISTORY  = path.join(ROOT, '.history.json');
 const HISTORY_CAP = 50;
 const PRESETS_DIR = path.join(ROOT, 'presets');
 const EXPORTS_SUBDIR = 'exports';
+const GALLERIES  = path.join(ROOT, 'galleries');
+const VIDEOS     = path.join(ROOT, 'videos');
+
+// Filesystem-safe slug for gallery/video folder names (letters, digits, -, _).
+function slugName(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'untitled';
+}
+// Timestamp in YYYYMMDD-HHMMSS (local time) for run folder names.
+function stamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+         p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
 
 // Social media canvas presets — width × height at 1× (actual pixels).
 const PROMO_FORMATS = {
@@ -584,6 +601,21 @@ const server = http.createServer(async (req, res) => {
       return serveFile(res, full);
     }
 
+    // static: galleries/<name_YYYYMMDD-HHMMSS>/*  (built by /api/export/gallery)
+    if (pathname.startsWith('/galleries/')) {
+      const rel = pathname.slice('/galleries/'.length);
+      const full = safeJoin(GALLERIES, rel);
+      if (!full) { res.writeHead(403); res.end(); return; }
+      return serveFile(res, full);
+    }
+    // static: videos/<name_YYYYMMDD-HHMMSS>/*  (built by /api/export/video)
+    if (pathname.startsWith('/videos/')) {
+      const rel = pathname.slice('/videos/'.length);
+      const full = safeJoin(VIDEOS, rel);
+      if (!full) { res.writeHead(403); res.end(); return; }
+      return serveFile(res, full);
+    }
+
     // API: status
     if (pathname === '/api/status' && req.method === 'GET') {
       return json(res, 200, { running: run.running, command: run.command, exit: run.exit, paused: run.paused, pauseMessage: run.pauseMessage });
@@ -981,7 +1013,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     // POST /api/export/gallery  body: { app, title }
-    // Builds a self-contained gallery.html (all screenshots inlined as base64).
+    // Builds a self-contained gallery.html (all screenshots inlined as base64)
+    // into galleries/<slug>_<YYYYMMDD-HHMMSS>/.
     if (pathname === '/api/export/gallery' && req.method === 'POST') {
       const body = await readBody(req);
       const app = String(body.app || '').replace(/[^\w.-]/g, '');
@@ -1001,30 +1034,38 @@ const server = http.createServer(async (req, res) => {
         return { name: f, src: `data:${mime};base64,${b64}`, caption: meta.caption || '', note: meta.note || '', url: meta.url || '' };
       });
       const title = body.title || app;
-      const html = buildGalleryHtml(title, slides);
-      const outPath = path.join(dir, 'gallery.html');
-      fs.writeFileSync(outPath, html);
-      return json(res, 200, { ok: true, file: `${app}/gallery.html`, count: slides.length });
+      // Timestamped run folder under galleries/, so each build keeps its own
+      // copy instead of overwriting the previous one.
+      const runName = slugName(title || app) + '_' + stamp();
+      const runDir = path.join(GALLERIES, runName);
+      fs.mkdirSync(runDir, { recursive: true });
+      fs.writeFileSync(path.join(runDir, 'gallery.html'), buildGalleryHtml(title, slides));
+      fs.writeFileSync(path.join(runDir, 'meta.json'), JSON.stringify({
+        title, app, ts: Date.now(), count: slides.length,
+        sources: files,
+      }, null, 2));
+      return json(res, 200, { ok: true, file: `galleries/${runName}/gallery.html`, run: runName, count: slides.length });
     }
 
-    // POST /api/export/pdf  body: { app }  — requires gallery.html to exist (or regenerates).
+    // POST /api/export/pdf  body: { run }  or legacy { app }
+    // run = gallery run folder (as returned by /api/export/gallery).
     if (pathname === '/api/export/pdf' && req.method === 'POST') {
       const body = await readBody(req);
-      const app = String(body.app || '').replace(/[^\w.-]/g, '');
-      if (!app) return json(res, 400, { error: 'app required' });
-      const galleryAbs = path.join(SHOTS, app, 'gallery.html');
-      if (!fs.existsSync(galleryAbs)) return json(res, 400, { error: 'gallery.html not found — export gallery first' });
-      const outFile = `gallery-${app}.pdf`;
-      const outPath = path.join(SHOTS, app, outFile);
+      const run = String(body.run || '').replace(/[^\w.-]/g, '');
+      if (!run) return json(res, 400, { error: 'run (gallery folder) required' });
+      const runDir = path.join(GALLERIES, run);
+      const galleryAbs = path.join(runDir, 'gallery.html');
+      if (!fs.existsSync(galleryAbs)) return json(res, 400, { error: 'gallery.html not found in run folder' });
+      const outPath = path.join(runDir, 'gallery.pdf');
       try {
         const { chromium } = require('playwright');
         const browser = await chromium.launch();
         const ctx = await browser.newContext();
         const page = await ctx.newPage();
-        await page.goto(`http://localhost:${ACTIVE_PORT}/screenshots/${encodeURIComponent(app)}/gallery.html?print=1`, { waitUntil: 'networkidle' });
+        await page.goto(`http://localhost:${ACTIVE_PORT}/galleries/${encodeURIComponent(run)}/gallery.html?print=1`, { waitUntil: 'networkidle' });
         await page.pdf({ path: outPath, format: 'Letter', printBackground: true, landscape: true, margin: { top: '0.3in', bottom: '0.3in', left: '0.3in', right: '0.3in' } });
         await browser.close();
-        return json(res, 200, { ok: true, file: `${app}/${outFile}` });
+        return json(res, 200, { ok: true, file: `galleries/${run}/gallery.pdf` });
       } catch (e) { return json(res, 500, { error: 'PDF export failed: ' + e.message }); }
     }
 
@@ -1078,7 +1119,10 @@ const server = http.createServer(async (req, res) => {
           };
         }),
       };
-      const outDir = path.join(SHOTS, outApp, EXPORTS_SUBDIR);
+      // Timestamped run folder under videos/, like galleries/ — each render
+      // keeps its own directory with webm/mp4/meta.json.
+      const runName = slugName(body.title || outApp) + '_' + stamp();
+      const outDir = path.join(VIDEOS, runName);
       fs.mkdirSync(outDir, { recursive: true });
       const webmOut = path.join(outDir, `video-${body.format}.webm`);
       try {
@@ -1108,7 +1152,7 @@ const server = http.createServer(async (req, res) => {
         await browser.close();
         fs.renameSync(tempPath, webmOut);
         // Try mp4 transcode if ffmpeg is on PATH.
-        let finalFile = `${outApp}/${EXPORTS_SUBDIR}/video-${body.format}.webm`;
+        let finalFile = `videos/${runName}/video-${body.format}.webm`;
         try {
           const mp4Out = webmOut.replace(/\.webm$/, '.mp4');
           await new Promise((resolve, reject) => {
@@ -1124,9 +1168,14 @@ const server = http.createServer(async (req, res) => {
             ff.on('error', reject);
             ff.on('exit', (code) => code === 0 ? resolve() : reject(new Error('ffmpeg exit ' + code)));
           });
-          finalFile = `${outApp}/${EXPORTS_SUBDIR}/video-${body.format}.mp4`;
+          finalFile = `videos/${runName}/video-${body.format}.mp4`;
         } catch { /* ffmpeg missing — keep webm */ }
-        return json(res, 200, { ok: true, file: finalFile, w: fmt.w, h: fmt.h, frames: cfg.frames.length });
+        fs.writeFileSync(path.join(outDir, 'meta.json'), JSON.stringify({
+          title: body.title || '', app: outApp, format: body.format, style: body.style || 'minimal',
+          ts: Date.now(), frames: cfg.frames.length, w: fmt.w, h: fmt.h, frameMs,
+          sources: shotPaths,
+        }, null, 2));
+        return json(res, 200, { ok: true, file: finalFile, run: runName, w: fmt.w, h: fmt.h, frames: cfg.frames.length });
       } catch (e) { return json(res, 500, { error: 'Video export failed: ' + e.message }); }
     }
 
