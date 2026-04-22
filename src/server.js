@@ -790,6 +790,13 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/promo.html')     return serveFile(res, path.join(WEB, 'promo.html'));
     if (pathname === '/slideshow.html') return serveFile(res, path.join(WEB, 'slideshow.html'));
     if (pathname === '/effects.css')    return serveFile(res, path.join(WEB, 'effects.css'));
+    if (pathname === '/favicon.ico')    return serveFile(res, path.join(WEB, 'logos', 'favicon.ico'));
+    if (pathname.startsWith('/logos/')) {
+      const rel = pathname.slice('/logos/'.length);
+      const full = safeJoin(path.join(WEB, 'logos'), rel);
+      if (!full) { res.writeHead(403); res.end(); return; }
+      return serveFile(res, full);
+    }
 
     // static: screenshots
     if (pathname.startsWith('/screenshots/')) {
