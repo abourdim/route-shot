@@ -198,6 +198,7 @@
     </datalist>
     <div class="row" style="margin-top: 10px;">
       <button id="appFormSave" class="primary">Save to apps.json</button>
+      <button id="appFormSaveAs" title="Save current form as a preset (presets/&lt;name&gt;.json)">Save as…</button>
       <button id="appFormDryRun">Dry run this app</button>
       <span class="save-hint" id="formHint"></span>
     </div>
@@ -1217,6 +1218,27 @@ $('appUpload').onchange = async (e) => {
 document.querySelectorAll('.recipe').forEach((b) => {
   b.onclick = () => applyRecipe(b.dataset.recipe);
 });
+
+$('appFormSaveAs').onclick = async () => {
+  const updated = serializeForm();
+  if (!updated.name || !updated.url) { alert('name and url are required'); return; }
+  // suggest a sensible default name
+  const suggested = updated.name || 'my-preset';
+  const name = prompt('Save as preset name (letters, digits, _ . - only):', suggested);
+  if (!name) return;
+  if (!/^[\w.-]+$/.test(name)) { alert('Bad name — letters, digits, _ . - only.'); return; }
+  // wrap in { apps: [...] } so presets are loadable just like apps.json
+  const body = { apps: [updated] };
+  const r = await fetchJSON('/api/presets/' + encodeURIComponent(name), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (r.error) { alert(r.error); return; }
+  $('formHint').textContent = `saved as preset "${name}" ✓`;
+  $('formHint').className = 'save-hint saved';
+  await loadPresets();
+  $('presetSelect').value = name;
+};
 
 $('appFormDryRun').onclick = async () => {
   // save first, then trigger a dry run
