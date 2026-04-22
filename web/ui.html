@@ -219,6 +219,9 @@
         <button id="presetLoad">Load preset</button>
         <button id="presetSave">Save current as preset…</button>
         <button id="presetDel" class="danger" title="Delete selected preset">✕</button>
+        <label class="muted" style="font-size:11px; display:flex; align-items:center; gap:4px;">
+          <input type="checkbox" id="presetAutoLoad"> auto-load
+        </label>
       </div>
       <textarea id="appsEditor" spellcheck="false"></textarea>
       <div class="row">
@@ -368,24 +371,41 @@ $('resumeBtn').onclick = async () => {
 
 setInterval(pollLogs, 800);
 
+let lastSavedAppsJson = '';
+
 async function loadApps() {
   const r = await fetchJSON('/api/apps');
-  $('appsEditor').value = JSON.stringify(r, null, 2);
+  const txt = JSON.stringify(r, null, 2);
+  $('appsEditor').value = txt;
+  lastSavedAppsJson = txt;
   markSaved('loaded');
+  updateSaveButton();
 }
 
 function markDirty() {
   const h = $('saveHint');
   h.textContent = 'unsaved';
   h.className = 'save-hint dirty';
+  updateSaveButton();
 }
 function markSaved(msg) {
   const h = $('saveHint');
   h.textContent = msg || 'saved';
   h.className = 'save-hint saved';
+  updateSaveButton();
+}
+function updateSaveButton() {
+  // disable Save when editor content matches what's on disk
+  const editor = $('appsEditor');
+  const sameAsDisk = editor.value === lastSavedAppsJson;
+  $('saveApps').disabled = sameAsDisk;
 }
 
-$('appsEditor').addEventListener('input', markDirty);
+$('appsEditor').addEventListener('input', () => {
+  // dirty if content diverges from disk; clean if user manually reverted
+  if ($('appsEditor').value === lastSavedAppsJson) markSaved('saved ✓');
+  else markDirty();
+});
 
 $('reloadApps').onclick = loadApps;
 $('formatApps').onclick = () => {
@@ -406,6 +426,8 @@ $('saveApps').onclick = async () => {
     body: JSON.stringify(body),
   });
   if (r.error) { alert(r.error); return; }
+  // refresh the dirty-tracking baseline so Save disables until next change
+  lastSavedAppsJson = $('appsEditor').value;
   markSaved('saved ✓');
 };
 
@@ -463,6 +485,7 @@ function saveSession() {
     const openSections = [...document.querySelectorAll('details.section[open]')].map((d) => d.querySelector('summary span').textContent);
     const data = {
       preset:   $('presetSelect').value,
+      autoLoad: $('presetAutoLoad').checked,
       appIdx:   currentIdx,
       url:      $('singleUrl').value,
       scanUrl:  $('scanUrl').value,
@@ -476,8 +499,9 @@ function saveSession() {
 function restoreSession() {
   let s; try { s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch {}
   if (!s) return;
-  if (s.url)     $('singleUrl').value = s.url;
-  if (s.scanUrl) $('scanUrl').value   = s.scanUrl;
+  if (s.url)             $('singleUrl').value = s.url;
+  if (s.scanUrl)         $('scanUrl').value   = s.scanUrl;
+  if (typeof s.autoLoad === 'boolean') $('presetAutoLoad').checked = s.autoLoad;
   if (s.preset && [...$('presetSelect').options].some((o) => o.value === s.preset)) {
     $('presetSelect').value = s.preset;
     if (typeof updatePresetHint === 'function') updatePresetHint();
@@ -503,6 +527,7 @@ function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveSe
   $(id).addEventListener('change', scheduleSave);
 });
 $('appPick').addEventListener('change', scheduleSave);
+$('presetAutoLoad').addEventListener('change', scheduleSave);
 document.addEventListener('toggle', (e) => { if (e.target.matches('details.section')) scheduleSave(); }, true);
 
 // Mirror Crawl-URL ↔ Scan-URL so the same URL only needs to be typed once.
@@ -1365,7 +1390,10 @@ async function loadPresets() {
       return `<option value="${escapeHtml(p)}" title="${escapeHtml(d)}">${escapeHtml(p)}</option>`;
     }).join('');
     if (!r.presets.length) sel.innerHTML = '<option value="">(no presets yet)</option>';
-    sel.onchange = updatePresetHint;
+    sel.onchange = () => {
+      updatePresetHint();
+      if ($('presetAutoLoad').checked) $('presetLoad').click();
+    };
     updatePresetHint();
   } catch (e) {}
 }
