@@ -116,6 +116,29 @@
   details.section > .section-body { padding: 4px 12px 12px;
     display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; align-items: flex-start; }
 
+  /* raw JSON section — distinct toolbar + large editor */
+  details.raw-json-section > summary { font-size: 14px; }
+  .raw-json-body { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .raw-json-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .raw-json-toolbar > select { flex: 1; min-width: 200px; }
+  .raw-json-label { color: var(--mute); font-size: 12px; margin-right: 2px; }
+  .raw-json-check { color: var(--mute); font-size: 11px; display: flex; align-items: center; gap: 4px; }
+  .raw-json-editor { min-height: 340px !important; font-size: 12px; }
+  .raw-json-actions { display: flex; gap: 6px; align-items: center; }
+
+  /* collapsible panel-level section (scan, etc.) */
+  details.panel-collapse { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0; }
+  details.panel-collapse > summary { padding: 14px 16px; cursor: pointer; font-size: 14px;
+    color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px;
+    list-style: none; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  details.panel-collapse > summary::-webkit-details-marker { display: none; }
+  details.panel-collapse > summary::before { content: "▸"; color: var(--mute); font-size: 14px; transition: transform 0.15s; }
+  details.panel-collapse[open] > summary::before { transform: rotate(90deg); }
+  details.panel-collapse > summary .summary-tag { margin-left: auto; color: var(--mute);
+    font-size: 11px; font-weight: normal; text-transform: none; letter-spacing: 0; }
+  details.panel-collapse > .panel-body { padding: 0 16px 14px; }
+
   /* JSON modal */
   .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200;
     display: none; align-items: center; justify-content: center; padding: 40px; }
@@ -212,23 +235,29 @@
       <span class="save-hint" id="formHint"></span>
     </div>
 
-    <details style="margin-top: 16px;">
-      <summary class="muted" style="cursor: pointer;">Raw JSON (advanced)</summary>
-      <div class="row" style="margin-top: 8px;">
-        <select id="presetSelect" style="flex: 1;"></select>
-        <button id="presetLoad">Load preset</button>
-        <button id="presetSave">Save current as preset…</button>
-        <button id="presetDel" class="danger" title="Delete selected preset">✕</button>
-        <label class="muted" style="font-size:11px; display:flex; align-items:center; gap:4px;">
-          <input type="checkbox" id="presetAutoLoad"> auto-load
-        </label>
-      </div>
-      <textarea id="appsEditor" spellcheck="false"></textarea>
-      <div class="row">
-        <button id="saveApps" class="primary">Save</button>
-        <button id="reloadApps">Reload</button>
-        <button id="formatApps">Format</button>
-        <span class="save-hint" id="saveHint">loaded</span>
+    <details class="section raw-json-section" open style="margin-top: 16px;">
+      <summary>
+        <span>Raw JSON &amp; presets</span>
+        <span class="summary-tag" id="rawSummaryTag"></span>
+      </summary>
+      <div class="raw-json-body">
+        <div class="raw-json-toolbar">
+          <label class="raw-json-label" for="presetSelect">Preset</label>
+          <select id="presetSelect"></select>
+          <button id="presetLoad">Load</button>
+          <button id="presetSave" title="Save current config as a new preset">Save as…</button>
+          <button id="presetDel" class="danger" title="Delete selected preset">Delete</button>
+          <label class="raw-json-check" title="Load the preset automatically when you pick one">
+            <input type="checkbox" id="presetAutoLoad"> auto-load
+          </label>
+        </div>
+        <textarea id="appsEditor" spellcheck="false" class="raw-json-editor"></textarea>
+        <div class="raw-json-actions">
+          <button id="saveApps" class="primary">Save to apps.json</button>
+          <button id="reloadApps" title="Reload apps.json from disk, discarding edits">Reload from disk</button>
+          <button id="formatApps" title="Pretty-print JSON (Ctrl+F)">Format</button>
+          <span class="save-hint" id="saveHint">loaded</span>
+        </div>
       </div>
     </details>
 
@@ -245,39 +274,44 @@
     </details>
   </section>
 
-  <section class="panel" style="grid-column: 1 / -1;">
-    <h2>Scan URL → pick buttons</h2>
-    <div class="row">
-      <input type="text" id="scanUrl" placeholder="https://example.com (leave blank to use first app in apps.json)" list="scansList">
-      <datalist id="scansList"></datalist>
-      <input type="text" id="scanDismiss" placeholder="dismiss selector (optional)" style="flex: 1;">
-      <button id="scanBtn">Scan</button>
+  <details class="panel-collapse" open style="grid-column: 1 / -1;">
+    <summary>
+      <span>Scan URL → pick buttons</span>
+      <span class="summary-tag" id="scanSummaryTag"></span>
+    </summary>
+    <div class="panel-body">
+      <div class="row">
+        <input type="text" id="scanUrl" placeholder="https://example.com (leave blank to use first app in apps.json)" list="scansList">
+        <datalist id="scansList"></datalist>
+        <input type="text" id="scanDismiss" placeholder="dismiss selector (optional)" style="flex: 1;">
+        <button id="scanBtn">Scan</button>
+      </div>
+      <details style="margin-top: -4px;">
+        <summary class="muted" style="cursor: pointer; font-size: 12px;">Recent scans</summary>
+        <div id="scansHistory" class="row" style="flex-wrap: wrap; gap: 4px; margin-top: 6px;"></div>
+      </details>
+      <div class="row muted" id="scanStatus"></div>
+      <div class="row" id="scanFilters" style="display: none;">
+        <input type="text" id="scanFilter" placeholder="Filter — type label / id / selector text…" style="flex: 1;">
+        <label class="muted" style="font-size: 12px; display:flex; align-items:center; gap:4px;">
+          <input type="checkbox" id="scanFilterVisible"> visible only
+        </label>
+        <label class="muted" style="font-size: 12px; display:flex; align-items:center; gap:4px;">
+          <input type="checkbox" id="scanFilterWithId"> with id only
+        </label>
+        <span class="muted" style="font-size: 11px;" id="scanFilterCount"></span>
+      </div>
+      <div id="scanResults" style="max-height: 400px; overflow-y: auto;"></div>
+      <div class="row" id="scanActions" style="display: none;">
+        <button id="scanAllBtn">Select all</button>
+        <button id="scanNoneBtn">Select none</button>
+        <button id="scanVisibleBtn">Only visible</button>
+        <select id="scanTargetApp"></select>
+        <button id="scanAddBtn" class="primary">Add checked selectors to clicks[]</button>
+        <button id="scanBlockBtn">Add checked labels to blocklist</button>
+      </div>
     </div>
-    <details style="margin-top: -4px;">
-      <summary class="muted" style="cursor: pointer; font-size: 12px;">Recent scans</summary>
-      <div id="scansHistory" class="row" style="flex-wrap: wrap; gap: 4px; margin-top: 6px;"></div>
-    </details>
-    <div class="row muted" id="scanStatus"></div>
-    <div class="row" id="scanFilters" style="display: none;">
-      <input type="text" id="scanFilter" placeholder="Filter — type label / id / selector text…" style="flex: 1;">
-      <label class="muted" style="font-size: 12px; display:flex; align-items:center; gap:4px;">
-        <input type="checkbox" id="scanFilterVisible"> visible only
-      </label>
-      <label class="muted" style="font-size: 12px; display:flex; align-items:center; gap:4px;">
-        <input type="checkbox" id="scanFilterWithId"> with id only
-      </label>
-      <span class="muted" style="font-size: 11px;" id="scanFilterCount"></span>
-    </div>
-    <div id="scanResults" style="max-height: 400px; overflow-y: auto;"></div>
-    <div class="row" id="scanActions" style="display: none;">
-      <button id="scanAllBtn">Select all</button>
-      <button id="scanNoneBtn">Select none</button>
-      <button id="scanVisibleBtn">Only visible</button>
-      <select id="scanTargetApp"></select>
-      <button id="scanAddBtn" class="primary">Add checked selectors to clicks[]</button>
-      <button id="scanBlockBtn">Add checked labels to blocklist</button>
-    </div>
-  </section>
+  </details>
 
   <section class="panel" style="grid-column: 1 / -1;">
     <h2>Screenshots <span class="muted" id="shotCount"></span></h2>
@@ -390,6 +424,9 @@ async function loadApps() {
   lastSavedAppsJson = txt;
   markSaved('loaded');
   updateSaveButton();
+  const apps = (r && r.apps) || [];
+  const tag = $('rawSummaryTag');
+  if (tag) tag.textContent = `${apps.length} app(s) · ${txt.length} chars`;
 }
 
 function markDirty() {
@@ -817,6 +854,7 @@ $('scanBtn').onclick = async () => {
     $('scanFilters').style.display = 'flex';
     $('scanFilter').value = '';
     applyScanFilter();
+    updateScanSummary();
     $('scanStatus').textContent = `Found ${r.count} clickable element(s) — ${r.items.filter(i=>i.visible).length} visible. ` +
       `Pickable from form-field dropdowns now.`;
     $('scanActions').style.display = 'flex';
@@ -874,6 +912,13 @@ function renderScanTable() {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function updateScanSummary() {
+  const t = $('scanSummaryTag');
+  if (!scanItems.length) { t.textContent = 'idle'; return; }
+  const vis = scanItems.filter((i) => i.visible).length;
+  t.textContent = `${scanItems.length} element(s), ${vis} visible`;
 }
 
 function applyScanFilter() {
