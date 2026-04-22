@@ -156,6 +156,7 @@
       <button id="runDryBtn" title="Discover + enumerate — no screenshots">Dry run (plan only)</button>
       <button id="stopBtn" disabled>Stop</button>
       <button id="cleanBtn" class="danger">Clean screenshots</button>
+      <button id="openFolderBtn" title="Open screenshots/ in your OS file manager">📂 Open folder</button>
     </div>
     <div id="pauseBanner" style="display:none; padding: 10px 14px; margin: 8px 0;
       background: #2d2208; border-left: 3px solid var(--warn); border-radius: 4px;">
@@ -446,6 +447,75 @@ $('cleanBtn').onclick = async () => {
   await fetchJSON('/api/clean', { method: 'POST' });
   loadGallery();
 };
+
+$('openFolderBtn').onclick = async () => {
+  const r = await fetchJSON('/api/open-folder', { method: 'POST' });
+  if (r.error) alert(r.error);
+};
+
+// --- session persistence (localStorage) ------------------------------------
+// Restore selected preset, edited app index, the URL inputs, and which
+// accordion sections are open across page reloads.
+const SESSION_KEY = 'route-shot.session.v1';
+
+function saveSession() {
+  try {
+    const openSections = [...document.querySelectorAll('details.section[open]')].map((d) => d.querySelector('summary span').textContent);
+    const data = {
+      preset:   $('presetSelect').value,
+      appIdx:   currentIdx,
+      url:      $('singleUrl').value,
+      scanUrl:  $('scanUrl').value,
+      openSections,
+      ts: Date.now(),
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+function restoreSession() {
+  let s; try { s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch {}
+  if (!s) return;
+  if (s.url)     $('singleUrl').value = s.url;
+  if (s.scanUrl) $('scanUrl').value   = s.scanUrl;
+  if (s.preset && [...$('presetSelect').options].some((o) => o.value === s.preset)) {
+    $('presetSelect').value = s.preset;
+    if (typeof updatePresetHint === 'function') updatePresetHint();
+  }
+  if (Number.isInteger(s.appIdx) && currentApps.apps[s.appIdx]) {
+    currentIdx = s.appIdx;
+    populateAppPick();
+    renderForm();
+  }
+  if (Array.isArray(s.openSections)) {
+    document.querySelectorAll('details.section').forEach((d) => {
+      const title = d.querySelector('summary span')?.textContent;
+      if (s.openSections.includes(title)) d.open = true;
+    });
+  }
+}
+
+// Save on any meaningful change. Debounced.
+let saveTimer;
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveSession, 400); }
+['singleUrl', 'scanUrl', 'presetSelect'].forEach((id) => {
+  $(id).addEventListener('input',  scheduleSave);
+  $(id).addEventListener('change', scheduleSave);
+});
+$('appPick').addEventListener('change', scheduleSave);
+document.addEventListener('toggle', (e) => { if (e.target.matches('details.section')) scheduleSave(); }, true);
+
+// Mirror Crawl-URL ↔ Scan-URL so the same URL only needs to be typed once.
+$('singleUrl').addEventListener('input', () => {
+  if (!$('scanUrl').value || $('scanUrl').dataset.mirror === '1') {
+    $('scanUrl').value = $('singleUrl').value;
+    $('scanUrl').dataset.mirror = '1';
+  }
+});
+$('scanUrl').addEventListener('input', () => {
+  $('scanUrl').dataset.mirror = '0';   // user typed in scan → stop mirroring
+  if (!$('singleUrl').value) $('singleUrl').value = $('scanUrl').value;
+});
 
 $('impBtn').onclick = async () => {
   const rec = $('impRec').value.trim();
@@ -1349,11 +1419,16 @@ $('presetDel').onclick = async () => {
   await loadPresets();
 };
 
-loadApps();
-loadGallery();
-loadHistory();
-loadPresets();
-initForm();
+// Restore previous session AFTER all initial loads have populated the
+// dropdowns and form (otherwise we can't select a preset that isn't there yet).
+(async () => {
+  await loadApps();
+  loadGallery();
+  loadHistory();
+  await loadPresets();
+  await initForm();
+  restoreSession();
+})();
 </script>
 
 </body>

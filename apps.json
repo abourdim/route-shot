@@ -1,5 +1,5 @@
 {
-  "_description": "Hardware that needs manual pairing first (micro:bit, Arduino, BLE devices). Headful Chromium opens, you click Connect + pick the device, press Enter in the terminal — then snapshots run. Sequential mode keeps the connection alive across clicks.",
+  "_description": "Real micro:bit (or any Web Serial / BLE device) connected by hand. Headful Chromium opens, you click Connect + pair, then click Resume in the dashboard (or press Enter in terminal). Waits for the Disconnect button to appear (= connection confirmed) before snapshotting all 6 tabs. Sequential mode keeps the connection alive across clicks; longer clickWait so each tab has time to render live sensor data.",
   "apps": [
     {
       "name": "bit-playground-connected",
@@ -8,11 +8,25 @@
       "dismiss": "button:has-text(\"Let's Go\")",
       "preSteps": [
         {
+          "action": "click",
+          "selector": "#connectBtn"
+        },
+        {
           "action": "pause",
-          "value": "Click Connect, pair your micro:bit, then come back here and press Enter."
+          "value": "Pair your micro:bit in the Chrome popup, then click Resume here."
+        },
+        {
+          "action": "waitForSelector",
+          "selector": "#disconnectBtn:visible",
+          "timeout": 15000
+        },
+        {
+          "action": "wait",
+          "value": 1500
         }
       ],
       "clickMode": "sequential",
+      "clickWait": 1800,
       "maxPages": 1,
       "clicks": [
         "#controlsTabBtn",

@@ -313,6 +313,20 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    // API: open the screenshots folder in the OS file manager
+    if (pathname === '/api/open-folder' && req.method === 'POST') {
+      if (!fs.existsSync(SHOTS)) fs.mkdirSync(SHOTS, { recursive: true });
+      const platform = process.platform;
+      const cmd = platform === 'win32' ? 'explorer'
+                : platform === 'darwin' ? 'open'
+                : 'xdg-open';
+      try {
+        const child = spawn(cmd, [SHOTS], { detached: true, stdio: 'ignore' });
+        child.unref();
+        return json(res, 200, { ok: true, opened: SHOTS });
+      } catch (e) { return json(res, 500, { error: e.message }); }
+    }
+
     // API: delete one screenshot
     if (pathname === '/api/shot' && req.method === 'DELETE') {
       const rel = u.searchParams.get('path');
