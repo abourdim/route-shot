@@ -784,6 +784,7 @@ function setManualUi(running, info = {}) {
   }
 }
 
+let lastManualCount = 0;
 async function refreshManualStatus() {
   try {
     const s = await fetchJSON('/api/manual/status');
@@ -791,8 +792,15 @@ async function refreshManualStatus() {
     if (s.running) {
       $('manualStatus').innerHTML =
         `session on <code>${escapeHtml(s.appName)}</code> · current URL: <code>${escapeHtml(s.currentUrl || s.url || '')}</code> · <b>${s.count}</b> snapshot(s) taken`;
+      // In-page widget fires snaps directly to /api/manual/snapshot without
+      // the dashboard knowing — detect count change and refresh the gallery.
+      if (s.count !== lastManualCount) {
+        lastManualCount = s.count;
+        loadGallery();
+      }
     } else {
       $('manualStatus').textContent = '';
+      lastManualCount = 0;
     }
   } catch {}
 }
