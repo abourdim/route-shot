@@ -102,6 +102,20 @@
   .idx-row .sk { color: var(--warn); }
   .idx-row .er { color: var(--bad); }
 
+  /* form-section accordion */
+  details.section { border: 1px solid var(--border); border-radius: 6px;
+    background: var(--code-bg); margin-bottom: 6px; }
+  details.section[open] { background: var(--bg); }
+  details.section > summary { padding: 8px 12px; cursor: pointer; font-size: 13px;
+    color: var(--accent); list-style: none; display: flex; align-items: center; gap: 8px; }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before { content: "▸"; color: var(--mute); transition: transform 0.15s; }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section > summary .summary-tag { margin-left: auto; color: var(--mute);
+    font-size: 11px; font-weight: normal; }
+  details.section > .section-body { padding: 4px 12px 12px;
+    display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; align-items: flex-start; }
+
   /* JSON modal */
   .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200;
     display: none; align-items: center; justify-content: center; padding: 40px; }
@@ -882,37 +896,73 @@ function renderForm() {
   clicks.value = (app.clicks || []).join('\n');
   clicks.placeholder = '#myBtn1\n#myBtn2\nbutton:has-text("Submit")';
 
-  host.append(
-    ...field('name', name,
-      'A label — becomes the screenshots subfolder name.'),
-    ...field('url', url,
-      'Start URL. The crawler always begins here.'),
-    ...field('dismiss', dismiss,
-      'Selector clicked right after page load — usually a welcome modal or cookie banner. Pick from the dropdown for examples.'),
-    ...field('maxPages', maxPages,
-      'How many pages to BFS-crawl from start. <b>Set to 1</b> to snapshot only the start page.'),
-    ...field('includeHash', includeHash,
-      'Treat <code>#/foo</code> and <code>#/bar</code> as separate pages (for hash-routed SPAs).'),
-    ...field('autoButtons', autoBtn,
-      'Auto-discover and click every <code>&lt;button&gt;</code>. One screenshot per discovered button.'),
-    ...field('autoButtonsBlocklist', block,
-      'Regex (case-insensitive, <code>|</code> = OR) of button texts to skip. Examples in the dropdown.'),
-    ...field('autoButtonsMax', blockMax,
-      'Cap on auto-discovered buttons per page (default 40 — bump if a page has more).'),
-    ...field('clickMode', clickMode,
-      '<b>sequential</b> for tabs (state accumulates) · <b>independent</b> for isolated states (reload between clicks).'),
-    ...field('preSteps', preBox,
-      'Setup actions run after dismiss, before crawling. Replayed on every independent reload.'),
-    ...field('', addBtn),
-    ...field('clicks', clicks,
-      'Explicit selectors to click (one per line). Each becomes a variant screenshot.'),
-    ...field('— advanced —', document.createElement('div'),
-      'Tweak only if defaults aren\'t working.'),
-    ...field('navTimeout', navTimeout, 'ms per page navigation (default 15000)'),
-    ...field('dismissWait', dismissWait, 'ms to wait after dismiss click (default 400)'),
-    ...field('clickWait', clickWait, 'ms to wait after each variant click before screenshotting (default 500)'),
-    ...field('maxDepth', maxDepth, 'Recursive auto-button exploration depth — <b>0</b> = flat (default), <b>1</b> = click then discover more.'),
-    ...field('headful', headful, 'Show the Chromium window — useful for debugging modals.'),
+  function section(title, summaryTag, openByDefault, ...rows) {
+    const d = document.createElement('details');
+    d.className = 'section';
+    if (openByDefault) d.open = true;
+    const sum = document.createElement('summary');
+    sum.innerHTML = `<span>${title}</span>${summaryTag ? `<span class="summary-tag">${summaryTag}</span>` : ''}`;
+    const body = document.createElement('div');
+    body.className = 'section-body';
+    rows.forEach((els) => els.forEach((el) => body.appendChild(el)));
+    d.append(sum, body);
+    host.appendChild(d);
+  }
+
+  // make the form a single column (accordion replaces grid)
+  host.style.gridTemplateColumns = '1fr';
+  host.style.display = 'block';
+
+  section('Essentials', `${app.name || 'unnamed'} → ${app.url || '?'}`, true,
+    field('name', name, 'A label — becomes the screenshots subfolder name.'),
+    field('url',  url,  'Start URL. The crawler always begins here.'),
+  );
+
+  section('Page & navigation',
+    [
+      app.maxPages != null ? `maxPages: ${app.maxPages}` : 'crawl all pages',
+      app.dismiss ? 'has dismiss' : null,
+      app.includeHash ? 'hash routes' : null,
+    ].filter(Boolean).join(' · '),
+    !!(app.dismiss || app.maxPages || app.includeHash),
+    field('dismiss', dismiss, 'Selector clicked right after page load — usually a welcome modal or cookie banner. Pick from the dropdown.'),
+    field('maxPages', maxPages, 'How many pages to BFS-crawl from start. <b>Set to 1</b> to snapshot only the start page.'),
+    field('includeHash', includeHash, 'Treat <code>#/foo</code> and <code>#/bar</code> as separate pages (for hash-routed SPAs).'),
+  );
+
+  section('Auto-discover buttons',
+    app.autoButtons ? `enabled${app.autoButtonsBlocklist ? ', blocklist set' : ''}` : 'off',
+    !!app.autoButtons,
+    field('autoButtons', autoBtn, 'Auto-discover and click every <code>&lt;button&gt;</code>. One screenshot per discovered button.'),
+    field('autoButtonsBlocklist', block, 'Regex (case-insensitive, <code>|</code> = OR) of button texts to skip.'),
+    field('autoButtonsMax', blockMax, 'Cap on auto-discovered buttons per page (default 40).'),
+    field('clickMode', clickMode, '<b>sequential</b> for tabs (state accumulates) · <b>independent</b> for isolated states (reload between clicks).'),
+    field('maxDepth', maxDepth, 'Recursive exploration depth — <b>0</b> = flat (default), <b>1</b> = click then discover more.'),
+  );
+
+  section('Setup steps (preSteps)',
+    `${(app.preSteps || []).length} step(s)`,
+    !!(app.preSteps && app.preSteps.length),
+    field('preSteps', preBox, 'Run after dismiss, before crawling. Replayed on every independent reload (use for login, mode toggles).'),
+    field('', addBtn),
+  );
+
+  section('Explicit clicks',
+    `${(app.clicks || []).length} selector(s)`,
+    !!(app.clicks && app.clicks.length),
+    field('clicks', clicks, 'Selectors to click (one per line). Each becomes a variant screenshot. Combine with autoButtons or use alone.'),
+  );
+
+  section('Timing & debug',
+    [
+      app.navTimeout && `nav ${app.navTimeout}ms`,
+      app.headful && 'headful',
+    ].filter(Boolean).join(' · ') || 'defaults',
+    false,
+    field('navTimeout',  navTimeout,  'ms per page navigation (default 15000)'),
+    field('dismissWait', dismissWait, 'ms to wait after dismiss click (default 400)'),
+    field('clickWait',   clickWait,   'ms to wait after each variant click before screenshotting (default 500)'),
+    field('headful',     headful,     'Show the Chromium window — useful for debugging modals.'),
   );
 
   host._refs = {
