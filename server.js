@@ -137,6 +137,40 @@ function listShots() {
   return out.sort();
 }
 
+// Find every index.json file under screenshots/ and return a summary for each.
+function listIndexes() {
+  if (!fs.existsSync(SHOTS)) return [];
+  const out = [];
+  const walk = (dir, rel) => {
+    for (const name of fs.readdirSync(dir)) {
+      const p = path.join(dir, name);
+      const st = fs.statSync(p);
+      const relPath = rel ? `${rel}/${name}` : name;
+      if (st.isDirectory()) walk(p, relPath);
+      else if (name === 'index.json') {
+        try {
+          const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+          // per-app file: { app, start, count, pages: [...] } or roll-up: { count, apps: [...] }
+          let stats = { ok: 0, skipped: 0, errors: 0 };
+          if (Array.isArray(j.pages)) {
+            for (const page of j.pages) {
+              if (page.screenshot) stats.ok++;
+              for (const v of page.variants || []) {
+                if (v.screenshot) stats.ok++;
+                else if (v.skipped) stats.skipped++;
+                else if (v.error)   stats.errors++;
+              }
+            }
+          }
+          out.push({ path: relPath, app: j.app || null, start: j.start || null, pageCount: j.count || 0, ...stats });
+        } catch {}
+      }
+    }
+  };
+  walk(SHOTS, '');
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 // --- routes -----------------------------------------------------------------
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
@@ -188,6 +222,21 @@ const server = http.createServer(async (req, res) => {
     // API: list screenshots
     if (pathname === '/api/shots' && req.method === 'GET') {
       return json(res, 200, { files: listShots() });
+    }
+
+    // API: list every index.json with stats
+    if (pathname === '/api/indexes' && req.method === 'GET') {
+      return json(res, 200, { indexes: listIndexes() });
+    }
+
+    // API: serve a specific index.json raw
+    if (pathname === '/api/index' && req.method === 'GET') {
+      const rel = u.searchParams.get('path');
+      if (!rel) return json(res, 400, { error: 'path required' });
+      const full = safeJoin(SHOTS, rel);
+      if (!full || !fs.existsSync(full)) return json(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return fs.createReadStream(full).pipe(res);
     }
 
     // API: clean screenshots

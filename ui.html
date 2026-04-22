@@ -87,6 +87,31 @@
   .scan-table td.sel { max-width: 300px; overflow-x: auto; white-space: nowrap; }
   .pill { display: inline-block; padding: 1px 6px; background: var(--bg);
     border: 1px solid var(--border); border-radius: 10px; font-size: 11px; margin-right: 4px; }
+
+  /* index.json summary strip */
+  .idx-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px;
+    margin-bottom: 6px; font-size: 13px; }
+  .idx-row .idx-path { flex: 1; font-family: monospace; color: var(--mute);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .idx-row .stat { font-family: monospace; font-size: 12px; }
+  .idx-row .ok { color: var(--good); }
+  .idx-row .sk { color: var(--warn); }
+  .idx-row .er { color: var(--bad); }
+
+  /* JSON modal */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200;
+    display: none; align-items: center; justify-content: center; padding: 40px; }
+  .modal.show { display: flex; }
+  .modal .box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    max-width: 1100px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; }
+  .modal .box header { padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; gap: 12px; align-items: center; }
+  .modal .box header .title { flex: 1; font-family: monospace; font-size: 13px; color: var(--mute); }
+  .modal .box .body { flex: 1; overflow: auto; padding: 12px 16px; }
+  .modal pre { background: var(--code-bg); padding: 14px; border-radius: 5px;
+    border: 1px solid var(--border); margin: 0; font-size: 12px; white-space: pre-wrap;
+    word-break: break-word; color: var(--ink); }
 </style>
 </head>
 <body>
@@ -164,9 +189,23 @@
 
   <section class="panel" style="grid-column: 1 / -1;">
     <h2>Screenshots <span class="muted" id="shotCount"></span></h2>
+    <div id="indexes"></div>
     <div class="gallery" id="gallery"></div>
   </section>
 </main>
+
+<!-- JSON modal -->
+<div class="modal" id="jsonModal">
+  <div class="box">
+    <header>
+      <span class="title" id="jsonTitle"></span>
+      <button id="jsonCopy">Copy</button>
+      <button id="jsonRaw">Open raw</button>
+      <button id="jsonClose">Close ✕</button>
+    </header>
+    <div class="body"><pre id="jsonBody"></pre></div>
+  </div>
+</div>
 
 <!-- full-screen scrollable image viewer -->
 <div class="lightbox" id="lightbox">
@@ -333,9 +372,51 @@ $('impBtn').onclick = async () => {
 let galleryFiles = [];
 let lbIndex = -1;
 
+async function loadIndexes() {
+  let r;
+  try { r = await fetchJSON('/api/indexes'); } catch { return; }
+  const box = $('indexes');
+  box.innerHTML = '';
+  (r.indexes || []).forEach((ix) => {
+    const row = document.createElement('div');
+    row.className = 'idx-row';
+    const label = ix.app ? `${ix.app}` : '(top-level roll-up)';
+    row.innerHTML = `
+      <strong>${escapeHtml(label)}</strong>
+      <span class="idx-path">${escapeHtml(ix.path)}</span>
+      <span class="stat">pages: <b>${ix.pageCount}</b></span>
+      <span class="stat ok">ok ${ix.ok}</span>
+      <span class="stat sk">skipped ${ix.skipped}</span>
+      <span class="stat er">err ${ix.errors}</span>
+      <button data-path="${escapeHtml(ix.path)}" class="viewIndex">View JSON</button>
+    `;
+    box.appendChild(row);
+  });
+  box.querySelectorAll('.viewIndex').forEach((b) => {
+    b.onclick = () => showJson(b.dataset.path);
+  });
+}
+
+async function showJson(relPath) {
+  try {
+    const r = await fetch('/api/index?path=' + encodeURIComponent(relPath));
+    const txt = await r.text();
+    let pretty = txt;
+    try { pretty = JSON.stringify(JSON.parse(txt), null, 2); } catch {}
+    $('jsonTitle').textContent = relPath;
+    $('jsonBody').textContent = pretty;
+    $('jsonModal').classList.add('show');
+    $('jsonRaw').onclick  = () => window.open('/screenshots/' + encodeURI(relPath), '_blank');
+    $('jsonCopy').onclick = () => navigator.clipboard.writeText(pretty);
+  } catch (e) { alert('Failed: ' + e.message); }
+}
+$('jsonClose').onclick = () => $('jsonModal').classList.remove('show');
+$('jsonModal').addEventListener('click', (e) => { if (e.target.id === 'jsonModal') $('jsonClose').click(); });
+
 async function loadGallery() {
   const r = await fetchJSON('/api/shots');
   galleryFiles = r.files;
+  loadIndexes();
   const g = $('gallery');
   g.innerHTML = '';
   $('shotCount').textContent = r.files.length ? `(${r.files.length})` : '';
