@@ -56,8 +56,8 @@
   .rail button .ri { font-size: 20px; line-height: 1; }
   .rail button:hover { color: var(--ink); background: var(--code-bg); }
   .rail button.active {
-    color: var(--accent); background: rgba(88,166,255,0.08);
-    border-color: rgba(88,166,255,0.35);
+    color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .rail .spacer { flex: 1; }
   .rail .kbd-hint { position: absolute; top: 3px; right: 3px;
@@ -76,16 +76,64 @@
     border-radius: 8px; padding: 18px 22px; }
   .panel h2 { margin: 0 0 14px; font-size: 14px; color: var(--accent);
     text-transform: uppercase; letter-spacing: 0.5px; }
-  /* ── Workshop-DIY template header + footer (faithful port) ── */
-  :root {
-    --wsd-accent:  #d4a03c;
-    --wsd-accent2: #0ea5e9;
-    --wsd-text-muted: #8a7e6e;
-    --wsd-border: rgba(212,160,60,.18);
-    --wsd-bism: #d4a03c;
-    --wsd-glow: rgba(212,160,60,.15);
-    --font-h: 'Righteous', 'Tajawal', sans-serif;
+  /* ── Workshop-DIY theme system (ported from /tools/ template) ── */
+  :root { --font-h: 'Righteous', 'Tajawal', sans-serif; }
+  /* Default = mosque-gold */
+  html, html[data-theme="mosque-gold"] {
+    --bg: #08091a; --panel: #0b0d24; --code-bg: #05061a;
+    --ink: #e4ddd0; --mute: #8a7e6e; --border: rgba(212,160,60,.20);
+    --accent: #d4a03c; --wsd-accent2: #0ea5e9;
+    --wsd-bism: #d4a03c; --wsd-glow: rgba(212,160,60,.18);
+    --good: #6acf92; --warn: #f0b455; --bad: #e76161;
   }
+  html[data-theme="zellige"] {
+    --bg: #041c2c; --panel: #06253a; --code-bg: #031522;
+    --ink: #d6eaf8; --mute: #6b9cc0; --border: rgba(56,189,248,.22);
+    --accent: #38bdf8; --wsd-accent2: #f0abfc;
+    --wsd-bism: #7dd3fc; --wsd-glow: rgba(56,189,248,.15);
+    --good: #6ee7b7; --warn: #fbbf24; --bad: #fb7185;
+  }
+  html[data-theme="andalus"] {
+    --bg: #0a1a0a; --panel: #0d200e; --code-bg: #061206;
+    --ink: #d5eed5; --mute: #6b9e6b; --border: rgba(74,222,128,.22);
+    --accent: #4ade80; --wsd-accent2: #fbbf24;
+    --wsd-bism: #a7f3d0; --wsd-glow: rgba(74,222,128,.15);
+    --good: #4ade80; --warn: #fbbf24; --bad: #fb7185;
+  }
+  html[data-theme="majlis"] {
+    --bg: #0c0020; --panel: #170732; --code-bg: #080015;
+    --ink: #e2d9f2; --mute: #9987b6; --border: rgba(192,132,252,.22);
+    --accent: #c084fc; --wsd-accent2: #22d3ee;
+    --wsd-bism: #e9d5ff; --wsd-glow: rgba(192,132,252,.15);
+    --good: #86efac; --warn: #fcd34d; --bad: #fda4af;
+  }
+  html[data-theme="safari"] {
+    --bg: #071407; --panel: #0a1e0a; --code-bg: #050d05;
+    --ink: #e5f0d9; --mute: #93b574; --border: rgba(163,230,53,.22);
+    --accent: #a3e635; --wsd-accent2: #fb923c;
+    --wsd-bism: #bef264; --wsd-glow: rgba(163,230,53,.15);
+    --good: #bef264; --warn: #fb923c; --bad: #f87171;
+  }
+  html[data-theme="modernist"] {
+    --bg: #0a0f1e; --panel: #101729; --code-bg: #060a15;
+    --ink: #d8e2f4; --mute: #7b8aa4; --border: rgba(59,130,246,.22);
+    --accent: #3b82f6; --wsd-accent2: #f97316;
+    --wsd-bism: #93c5fd; --wsd-glow: rgba(59,130,246,.15);
+    --good: #4ade80; --warn: #fb923c; --bad: #f87171;
+  }
+  /* Aliases kept for existing rule selectors */
+  :root { --wsd-accent: var(--accent); --wsd-text-muted: var(--mute); --wsd-border: var(--border); }
+
+  /* Theme-toast — flashes the theme name on cycle */
+  .theme-toast { position: fixed; top: 16px; left: 50%;
+    transform: translateX(-50%) translateY(-40px);
+    background: var(--panel); border: 1px solid var(--accent);
+    color: var(--accent); padding: 8px 16px; border-radius: 999px;
+    font: 600 12px/1 system-ui, sans-serif; letter-spacing: 0.5px;
+    text-transform: uppercase; z-index: 500; opacity: 0;
+    transition: opacity .2s, transform .2s;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4); pointer-events: none; }
+  .theme-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   body > header.wsd {
     position: sticky; top: 0; z-index: 50; background: var(--bg);
     padding: 18px 20px 10px; border-bottom: 1px solid var(--border);
@@ -183,7 +231,7 @@
 
   /* Hero panels (Manual + Screenshots) — front-of-page, accent left rule, larger heading */
   .panel.hero { border-left: 4px solid var(--accent); padding: 22px 26px 22px 24px;
-    background: linear-gradient(180deg, rgba(88,166,255,0.05), var(--panel) 60%); }
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), var(--panel) 60%); }
   .panel.hero h2 { font-size: 16px; margin: 0 0 16px;
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .panel.hero h2 .hero-sub { font-size: 12px; color: var(--mute); font-weight: normal;
@@ -877,12 +925,42 @@ document.addEventListener('keydown', (e) => {
 
 // Workshop-DIY header: icon buttons + hijri date.
 document.getElementById('helpBtn')?.addEventListener('click', () => window.open('/userguide.html', '_blank'));
+// ── Themes: 6 palettes ported from the Workshop-DIY template ──
+const THEMES = [
+  { id: 'mosque-gold', name: '🕌 Mosque gold' },
+  { id: 'zellige',     name: '🔷 Zellige blue' },
+  { id: 'andalus',     name: '🌿 Andalus green' },
+  { id: 'majlis',      name: '🔮 Majlis purple' },
+  { id: 'safari',      name: '🏜️ Safari lime' },
+  { id: 'modernist',   name: '💎 Modernist blue' },
+];
+const THEME_KEY = 'route-shot.theme.v1';
+function applyTheme(id) {
+  if (!THEMES.some(t => t.id === id)) id = THEMES[0].id;
+  document.documentElement.setAttribute('data-theme', id);
+  try { localStorage.setItem(THEME_KEY, id); } catch {}
+  return THEMES.find(t => t.id === id);
+}
+function showThemeToast(name) {
+  let t = document.getElementById('themeToast');
+  if (!t) { t = document.createElement('div'); t.id = 'themeToast'; t.className = 'theme-toast'; document.body.appendChild(t); }
+  t.textContent = name;
+  t.classList.add('show');
+  clearTimeout(showThemeToast._h);
+  showThemeToast._h = setTimeout(() => t.classList.remove('show'), 1400);
+}
+// Cycle on click; persist.
 document.getElementById('themeBtn')?.addEventListener('click', () => {
-  const h = document.documentElement;
-  const themes = ['', 'wsd-mosque', 'wsd-zellige', 'wsd-andalus'];
-  const next = (themes.indexOf(h.getAttribute('data-wsd') || '') + 1) % themes.length;
-  if (themes[next]) h.setAttribute('data-wsd', themes[next]); else h.removeAttribute('data-wsd');
+  const cur = document.documentElement.getAttribute('data-theme') || THEMES[0].id;
+  const next = THEMES[(THEMES.findIndex(t => t.id === cur) + 1) % THEMES.length];
+  applyTheme(next.id); showThemeToast(next.name);
 });
+// Load saved theme on startup.
+(function initTheme() {
+  let saved = THEMES[0].id;
+  try { saved = localStorage.getItem(THEME_KEY) || saved; } catch {}
+  applyTheme(saved);
+})();
 document.getElementById('logScrollBtn')?.addEventListener('click', () => {
   const logs = document.getElementById('logs');
   if (logs) logs.scrollIntoView({ behavior: 'smooth', block: 'center' });
