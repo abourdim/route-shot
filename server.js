@@ -176,6 +176,22 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    // API: delete one screenshot
+    if (pathname === '/api/shot' && req.method === 'DELETE') {
+      const rel = u.searchParams.get('path');
+      if (!rel) return json(res, 400, { error: 'path required' });
+      const full = safeJoin(SHOTS, rel);
+      if (!full || !fs.existsSync(full)) return json(res, 404, { error: 'not found' });
+      fs.unlinkSync(full);
+      // also remove empty parent dirs
+      let dir = path.dirname(full);
+      while (dir !== SHOTS && fs.existsSync(dir) && fs.readdirSync(dir).length === 0) {
+        fs.rmdirSync(dir);
+        dir = path.dirname(dir);
+      }
+      return json(res, 200, { ok: true });
+    }
+
     // API: run single URL
     if (pathname === '/api/run/single' && req.method === 'POST') {
       const body = await readBody(req);
