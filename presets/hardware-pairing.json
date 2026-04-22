@@ -7,8 +7,7 @@
       "headful": true,
       "dismiss": "button:has-text(\"Let's Go\")",
       "preSteps": [
-        { "action": "click",           "selector": "#connectBtn" },
-        { "action": "pause",           "value": "Pair your micro:bit in the Chrome popup, then click Resume here." },
+        { "action": "pause",           "value": "Click Connect in the page, pair your micro:bit, then click Resume here." },
         { "action": "waitForSelector", "selector": "#disconnectBtn:visible", "timeout": 15000 },
         { "action": "wait",            "value": 1500 }
       ],
