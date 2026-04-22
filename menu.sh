@@ -36,11 +36,7 @@ open_url() {
     #    path quirks and spaces, respects existing Chrome profile. Falls back to
     #    explicit chrome.exe paths if that fails.
     if command -v cmd.exe >/dev/null 2>&1 || [ -n "$WINDIR" ]; then
-        # convert MSYS /c/... path if any, pass the raw URL
-        if cmd.exe /c "start chrome \"$url\"" 2>/dev/null; then
-            printf "${B}→ Launched Chrome via 'start chrome'${NC}\n"
-            return
-        fi
+        # Prefer explicit chrome.exe if we can find it — most reliable.
         for p in "/c/Program Files/Google/Chrome/Application/chrome.exe" \
                  "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
                  "$LOCALAPPDATA/Google/Chrome/Application/chrome.exe"; do
@@ -50,6 +46,13 @@ open_url() {
                 return
             fi
         done
+        # Fall back to the Windows URL handler (always works for http(s)).
+        # Note: 'start chrome URL' (no empty title) is unreliable — when Chrome
+        # isn't on PATH, start silently succeeds and nothing opens.
+        if cmd.exe /c "start \"\" \"$url\"" 2>/dev/null; then
+            printf "${B}→ Launched via Windows URL handler${NC}\n"
+            return
+        fi
     fi
     # 3. macOS Chrome
     if [ -d "/Applications/Google Chrome.app" ]; then
