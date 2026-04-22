@@ -4,10 +4,8 @@
     {
       "name": "bit-playground-connected",
       "url": "https://abourdim.github.io/bit-playground/",
-      "dismiss": "button:has-text(\"Let's Go\")",
-      "maxPages": 1,
-      "clickWait": 1800,
       "headful": true,
+      "dismiss": "button:has-text(\"Let's Go\")",
       "preSteps": [
         {
           "action": "pause",
@@ -15,20 +13,26 @@
         },
         {
           "action": "waitForSelector",
-          "selector": "#disconnectBtn:visible"
+          "selector": "#disconnectBtn:visible",
+          "timeout": 30000
         },
         {
           "action": "wait",
-          "value": "1500"
+          "value": 1500
         }
       ],
+      "clickMode": "sequential",
+      "clickWait": 1800,
+      "maxPages": 1,
       "clicks": [
         "#controlsTabBtn",
         "#sensesTabBtn",
         "#servosTabBtn",
         "#gamepadTabBtn",
         "#graphTabBtn",
-        "#board3dTabBtn"
+        "#board3dTabBtn",
+        "#benchTabBtn",
+        "#othersTabBtn"
       ]
     }
   ]
