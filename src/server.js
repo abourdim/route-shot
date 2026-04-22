@@ -419,25 +419,32 @@ const server = http.createServer(async (req, res) => {
           content: `
             (function() {
               if (window.top !== window) return;  // only in top frame
-              const API = 'http://localhost:${dashboardPort}/api/manual/snapshot';
-              function snap(label) {
-                // 1. Try fetch (CORS + Private Network Access). Returns JSON on success.
-                return fetch(API, {
+              const PORT = ${dashboardPort};
+              // Try several hosts — IPv4, IPv6, hostname aliases — in case
+              // 'localhost' resolves to a family the server isn't bound on.
+              const HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
+              function tryFetch(host, label) {
+                return fetch('http://' + host + ':' + PORT + '/api/manual/snapshot', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ label: label || '' }),
                   mode: 'cors',
-                }).then(r => r.json()).catch((e) => {
-                  // 2. Fallback: image-ping GET with ?label=... — bypasses CORS entirely.
-                  //    Fire-and-forget: the browser loads the 1x1 GIF response.
-                  return new Promise((resolve) => {
-                    const img = new Image();
-                    const url = API + '?label=' + encodeURIComponent(label || '') + '&t=' + Date.now();
-                    img.onload  = () => resolve({ ok: true, filename: '(via image-ping)' });
-                    img.onerror = () => resolve({ error: 'fetch + image-ping both failed (dashboard running? port?)' });
-                    img.src = url;
-                  });
+                }).then(r => r.json());
+              }
+              function tryImgPing(host, label) {
+                return new Promise((resolve) => {
+                  const img = new Image();
+                  const url = 'http://' + host + ':' + PORT + '/api/manual/snapshot?label=' +
+                              encodeURIComponent(label || '') + '&t=' + Date.now();
+                  img.onload  = () => resolve({ ok: true, filename: '(via image-ping @ ' + host + ')' });
+                  img.onerror = () => resolve(null);
+                  img.src = url;
                 });
+              }
+              async function snap(label) {
+                for (const h of HOSTS) { try { return await tryFetch(h, label); } catch {} }
+                for (const h of HOSTS) { const r = await tryImgPing(h, label); if (r) return r; }
+                return { error: 'dashboard unreachable — tried ' + HOSTS.map(h => h + ':' + PORT).join(', ') };
               }
               function flash(msg, ok) {
                 const b = document.createElement('div');
@@ -645,7 +652,9 @@ function listenWithFallback(startPort, attempt = 0) {
       process.exit(1);
     }
   });
-  server.listen(p, () => {
+  // Bind to 0.0.0.0 so both IPv4 (127.0.0.1) and IPv6 loopback (::1) route
+  // correctly — dual-stack default doesn't always accept IPv4 on Windows.
+  server.listen(p, '0.0.0.0', () => {
     console.log(`route-shot dashboard  →  http://localhost:${p}`);
   });
 }
