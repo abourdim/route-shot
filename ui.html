@@ -139,6 +139,7 @@
     </details>
     <div class="row">
       <button id="runBatch" class="primary">Run batch (apps.json)</button>
+      <button id="runDryBtn" title="Discover + enumerate — no screenshots">Dry run (plan only)</button>
       <button id="stopBtn" disabled>Stop</button>
       <button id="cleanBtn" class="danger">Clean screenshots</button>
     </div>
@@ -351,6 +352,14 @@ $('runBatch').onclick = async () => {
   if (r.error) alert(r.error);
 };
 
+$('runDryBtn').onclick = async () => {
+  $('logs').innerHTML = '';
+  lastLogTs = 0;
+  run.command = 'dry-run';
+  const r = await fetchJSON('/api/run/batch?dry=1', { method: 'POST' });
+  if (r.error) alert(r.error);
+};
+
 $('stopBtn').onclick = async () => {
   await fetchJSON('/api/stop', { method: 'POST' });
 };
@@ -390,10 +399,13 @@ async function loadIndexes() {
     const row = document.createElement('div');
     row.className = 'idx-row';
     const label = ix.app ? `${ix.app}` : '(top-level roll-up)';
+    const dryTag = ix.dryRun ? ' <span class="pill" style="background:#402a08; border-color:#5a3a0a;">dry-run plan</span>' : '';
+    const plannedStat = ix.planned ? `<span class="stat" style="color: var(--accent);">planned ${ix.planned}</span>` : '';
     row.innerHTML = `
-      <strong>${escapeHtml(label)}</strong>
+      <strong>${escapeHtml(label)}</strong>${dryTag}
       <span class="idx-path">${escapeHtml(ix.path)}</span>
       <span class="stat">pages: <b>${ix.pageCount}</b></span>
+      ${plannedStat}
       <span class="stat ok">ok ${ix.ok}</span>
       <span class="stat sk">skipped ${ix.skipped}</span>
       <span class="stat er">err ${ix.errors}</span>

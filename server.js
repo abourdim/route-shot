@@ -148,22 +148,24 @@ function listIndexes() {
       const st = fs.statSync(p);
       const relPath = rel ? `${rel}/${name}` : name;
       if (st.isDirectory()) walk(p, relPath);
-      else if (name === 'index.json') {
+      else if (name === 'index.json' || name === 'plan.json') {
         try {
           const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-          // per-app file: { app, start, count, pages: [...] } or roll-up: { count, apps: [...] }
-          let stats = { ok: 0, skipped: 0, errors: 0 };
+          const isDry = !!j.dryRun;
+          let stats = { ok: 0, skipped: 0, errors: 0, planned: 0 };
           if (Array.isArray(j.pages)) {
             for (const page of j.pages) {
               if (page.screenshot) stats.ok++;
+              else if (page.plannedFilename) stats.planned++;
               for (const v of page.variants || []) {
-                if (v.screenshot) stats.ok++;
-                else if (v.skipped) stats.skipped++;
-                else if (v.error)   stats.errors++;
+                if (v.screenshot)           stats.ok++;
+                else if (v.plannedFilename) stats.planned++;
+                else if (v.skipped)         stats.skipped++;
+                else if (v.error)           stats.errors++;
               }
             }
           }
-          out.push({ path: relPath, app: j.app || null, start: j.start || null, pageCount: j.count || 0, ...stats });
+          out.push({ path: relPath, app: j.app || null, start: j.start || null, pageCount: j.count || 0, dryRun: isDry, ...stats });
         } catch {}
       }
     }
@@ -263,7 +265,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { indexes: listIndexes() });
     }
 
-    // API: serve a specific index.json raw
+    // API: serve a specific index.json / plan.json raw
     if (pathname === '/api/index' && req.method === 'GET') {
       const rel = u.searchParams.get('path');
       if (!rel) return json(res, 400, { error: 'path required' });
@@ -319,10 +321,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, r.error ? 409 : 200, r);
     }
 
-    // API: run batch
+    // API: run batch (optional ?dry=1 for a dry-run plan instead of screenshots)
     if (pathname === '/api/run/batch' && req.method === 'POST') {
       if (!fs.existsSync(APPS_CFG)) return json(res, 400, { error: 'apps.json not found' });
-      const r = spawnCrawler(['--batch', 'apps.json'], 'batch: apps.json');
+      const args = ['--batch', 'apps.json'];
+      let label = 'batch: apps.json';
+      if (u.searchParams.get('dry') === '1') { args.unshift('--dry-run'); label = 'dry-run: apps.json'; }
+      const r = spawnCrawler(args, label);
       return json(res, r.error ? 409 : 200, r);
     }
 

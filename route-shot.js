@@ -34,6 +34,10 @@ const DEFAULTS = {
   maxDepth:    Number(process.env.MAX_DEPTH || 0),
   // Launch visible Chromium instead of headless — handy for debugging modals.
   headful:     process.env.HEADFUL === '1',
+  // Dry run: discover + enumerate but take no screenshots. Writes a plan
+  // describing every variant that WOULD be captured so you can review before
+  // committing to a full run.
+  dryRun:      process.env.DRY_RUN === '1',
 };
 
 function slugify(s, fallback = 'item') {
@@ -116,7 +120,9 @@ async function captureUrl(page, url, idx, cfg, outDir) {
 
   const baseSlug = slugify(url);
   const filename = `${String(idx).padStart(3, '0')}_${baseSlug}.png`;
-  await page.screenshot({ path: path.join(outDir, filename), fullPage: true });
+  if (!cfg.dryRun) {
+    await page.screenshot({ path: path.join(outDir, filename), fullPage: true });
+  }
 
   const variants = [];
   let vi = 0;
@@ -192,21 +198,45 @@ async function captureUrl(page, url, idx, cfg, outDir) {
         : page.locator(item.selector).first();
       const count = await locator.count();
       if (!count) { variants.push({ label: item.label, selector: item.selector, skipped: 'not found', auto: item.auto || undefined }); continue; }
-      await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-      await locator.click({ timeout: 3000 });
-      await page.waitForTimeout(cfg.clickWait);
+
       const labelSlug = item.label ? slugify(item.label, '') : '';
       const selSlug   = item.selector ? slugify(item.selector, '').slice(0, 40) : '';
-      // if slugify stripped everything (emoji-only label), append a short hash
-      // of the raw label so each icon gets a unique, readable suffix
       const hashPart  = item.label && !labelSlug ? `emoji_${shortHash(item.label)}` : '';
       const suffix    = labelSlug || hashPart || selSlug || `v${vi}`;
       const vname = `${String(idx).padStart(3, '0')}_${baseSlug}__v${String(vi).padStart(2, '0')}_${suffix}.png`;
-      await page.screenshot({ path: path.join(outDir, vname), fullPage: true });
-      const entry = { label: item.label, screenshot: vname };
-      if (item.selector) entry.selector = item.selector;
-      if (item.auto) entry.auto = true;
-      variants.push(entry);
+
+      if (cfg.dryRun) {
+        // planned, not executed — describe what would happen
+        const rect = await locator.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const cs = getComputedStyle(el);
+          return {
+            visible: r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none',
+            tag: el.tagName.toLowerCase(),
+            id: el.id || null,
+            text: (el.innerText || el.value || '').trim().slice(0, 80),
+          };
+        }).catch(() => ({}));
+        const entry = {
+          label: item.label,
+          plannedFilename: vname,
+          source: item.auto ? 'auto' : 'explicit',
+          clickMode: effectiveMode,
+          ...rect,
+        };
+        if (item.selector) entry.selector = item.selector;
+        if (rect && rect.visible === false) entry.warning = 'element not currently visible';
+        variants.push(entry);
+      } else {
+        await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+        await locator.click({ timeout: 3000 });
+        await page.waitForTimeout(cfg.clickWait);
+        await page.screenshot({ path: path.join(outDir, vname), fullPage: true });
+        const entry = { label: item.label, screenshot: vname };
+        if (item.selector) entry.selector = item.selector;
+        if (item.auto) entry.auto = true;
+        variants.push(entry);
+      }
     } catch (e) {
       variants.push({ label: item.label, selector: item.selector, error: e.message, auto: item.auto || undefined });
     }
@@ -329,12 +359,17 @@ async function crawlApp(browser, app) {
     }
   }
 
-  fs.writeFileSync(
-    path.join(outDir, 'index.json'),
-    JSON.stringify({ app: app.name || null, start: cfg.url, count: results.length, pages: results }, null, 2)
-  );
+  const plan = {
+    app: app.name || null,
+    start: cfg.url,
+    dryRun: !!cfg.dryRun,
+    count: results.length,
+    pages: results,
+  };
+  const outFile = cfg.dryRun ? 'plan.json' : 'index.json';
+  fs.writeFileSync(path.join(outDir, outFile), JSON.stringify(plan, null, 2));
   await context.close();
-  return { name: app.name || null, url: cfg.url, outDir, count: results.length };
+  return { name: app.name || null, url: cfg.url, outDir, count: results.length, dryRun: !!cfg.dryRun };
 }
 
 // Convert a Chrome DevTools Recorder JSON export into route-shot preSteps.
@@ -463,6 +498,12 @@ function importRecording(recordingPath, { appName, startUrl, asClicks = false } 
     args.splice(presetIdx, 2, '--batch', path.join('presets', `${name}.json`));
   }
 
+  // --dry-run flips the global default so all apps in the batch run dry
+  if (args.includes('--dry-run') || args.includes('--dryrun')) {
+    DEFAULTS.dryRun = true;
+    console.log('[dry-run] no screenshots will be written — generating plan only\n');
+  }
+
   const batchIdx = args.indexOf('--batch');
   const isBatch  = batchIdx !== -1;
 
@@ -500,5 +541,7 @@ function importRecording(recordingPath, { appName, startUrl, asClicks = false } 
   }
 
   const total = summary.reduce((n, s) => n + (s.count || 0), 0);
-  console.log(`\nDone. ${summary.length} app(s), ${total} page(s) total in ./${DEFAULTS.outputDir}/`);
+  const mode = DEFAULTS.dryRun ? 'planned' : 'captured';
+  console.log(`\nDone. ${summary.length} app(s), ${total} page(s) ${mode} in ./${DEFAULTS.outputDir}/`);
+  if (DEFAULTS.dryRun) console.log('[dry-run] plan.json written next to each app — review before running without --dry-run.');
 })();
