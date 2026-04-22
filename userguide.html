@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>route-shot · user guide</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161b22; --ink: #e6edf3; --mute: #8b949e;
+    --accent: #58a6ff; --good: #3fb950; --warn: #d29922; --bad: #f85149;
+    --code-bg: #0d1117; --border: #30363d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 24px 96px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 32px; }
+  h1 { margin: 0 0 8px; font-size: 28px; }
+  h2 { margin-top: 48px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    font-size: 22px; }
+  h3 { margin-top: 28px; font-size: 17px; color: var(--accent); }
+  h4 { margin: 16px 0 8px; font-size: 15px; color: var(--mute); font-weight: 600; }
+  p, li { color: var(--ink); }
+  .mute { color: var(--mute); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px;
+    font: 13px/1 "Cascadia Mono", Consolas, monospace; color: #ffa657; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px;
+    overflow-x: auto; border: 1px solid var(--border); margin: 10px 0 16px; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 13px; }
+  .tip, .warn, .bad { padding: 12px 14px; border-radius: 6px; margin: 12px 0;
+    border-left: 3px solid; }
+  .tip  { border-color: var(--good); background: #0b2a15; }
+  .warn { border-color: var(--warn); background: #2d2208; }
+  .bad  { border-color: var(--bad);  background: #2b0f0e; }
+  .tip::before  { content: "💡 "; }
+  .warn::before { content: "⚠️ "; }
+  .bad::before  { content: "🚫 "; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px;
+    font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+    vertical-align: top; }
+  th { color: var(--mute); font-weight: 500; background: var(--panel); }
+  td code { white-space: nowrap; }
+  nav.toc { background: var(--panel); padding: 14px 18px; border-radius: 6px;
+    margin-bottom: 32px; border: 1px solid var(--border); }
+  nav.toc ul { margin: 4px 0 0 0; padding-left: 20px; columns: 2; }
+  nav.toc li { break-inside: avoid; }
+  nav.toc a { color: var(--ink); }
+  .kbd { background: var(--panel); padding: 2px 6px; border: 1px solid var(--border);
+    border-radius: 3px; font: 12px/1 monospace; }
+  .emoji-tag { display: inline-block; padding: 1px 6px; background: var(--panel);
+    border-radius: 3px; font-size: 13px; }
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border);
+    color: var(--mute); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>route-shot — user guide</h1>
+  <p class="mute">Crawl a web app, screenshot every page, and capture a variant per button click.</p>
+</header>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ul>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#quick">Quick start</a></li>
+    <li><a href="#menu">Menu</a></li>
+    <li><a href="#config">apps.json</a></li>
+    <li><a href="#fields">All fields</a></li>
+    <li><a href="#examples">Examples</a></li>
+    <li><a href="#presteps">preSteps</a></li>
+    <li><a href="#recorder">Recorder import</a></li>
+    <li><a href="#blocklist">Blocklist</a></li>
+    <li><a href="#output">Output layout</a></li>
+    <li><a href="#tips">Tips</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ul>
+</nav>
+
+<h2 id="install">Install</h2>
+<pre><code>git clone https://github.com/abourdim/route-shot.git
+cd route-shot
+./menu.sh            # option 2 installs playwright + chromium</code></pre>
+<p>Requires Node.js 18+. The <code>menu.sh</code> bash script orchestrates everything; direct <code>node route-shot.js …</code> invocations work too.</p>
+
+<h2 id="quick">Quick start</h2>
+<p>Single URL, no config file:</p>
+<pre><code>node route-shot.js https://example.com</code></pre>
+
+<p>Batch (many apps from a JSON config):</p>
+<pre><code>node route-shot.js --batch apps.json</code></pre>
+
+<p>Minimal <code>apps.json</code>:</p>
+<pre><code>{
+  "apps": [
+    {
+      "name": "my-app",
+      "url": "https://example.com",
+      "autoButtons": true
+    }
+  ]
+}</code></pre>
+<div class="tip">Four fields (<code>name</code>, <code>url</code>, <code>dismiss</code>, <code>autoButtons</code>) cover 95% of use cases.</div>
+
+<h2 id="menu">Interactive menu</h2>
+<pre><code>bash menu.sh</code></pre>
+<table>
+  <tr><th>#</th><th>Action</th></tr>
+  <tr><td>1</td><td>Check install (Node, Playwright, Chromium)</td></tr>
+  <tr><td>2</td><td>Install dependencies</td></tr>
+  <tr><td>3</td><td>Launch route-shot (single URL prompt)</td></tr>
+  <tr><td>4</td><td>Batch run — reads <code>apps.json</code></td></tr>
+  <tr><td>5</td><td>Import DevTools Recorder JSON → <code>apps.json</code></td></tr>
+  <tr><td>6</td><td>Start local web server on <code>localhost:8000</code> to view screenshots</td></tr>
+  <tr><td>7</td><td>Open viewer in browser</td></tr>
+  <tr><td>8</td><td>Stop web server</td></tr>
+  <tr><td>9</td><td>Open screenshots folder in OS file manager</td></tr>
+  <tr><td>10</td><td>Clean screenshots folder</td></tr>
+  <tr><td>11</td><td>Exit</td></tr>
+</table>
+
+<h2 id="config">apps.json structure</h2>
+<pre><code>{
+  "apps": [
+    { /* app 1 */ },
+    { /* app 2 */ }
+  ]
+}</code></pre>
+
+<p>Each <strong>app</strong> object must have <code>name</code> and <code>url</code>. Everything else is optional.</p>
+
+<div class="warn">Strict JSON — no trailing commas, no comments. The last key in an object must not have a <code>,</code> after it.</div>
+
+<h3>Two complementary click modes</h3>
+<table>
+  <tr><th>Mode</th><th>Use when</th></tr>
+  <tr><td><code>clicks: [...]</code> explicit</td><td>You know the buttons you want. Full control.</td></tr>
+  <tr><td><code>autoButtons: true</code></td><td>You want every discoverable button. Zero config beyond a blocklist.</td></tr>
+</table>
+<p>You can combine both — explicit clicks run first, then auto-discovery fills in the rest (deduped).</p>
+
+<h2 id="fields">All fields reference</h2>
+
+<h3>Identity & crawling</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Default</th><th>What it does</th></tr>
+  <tr><td><code>name</code></td><td>string</td><td>—</td><td>App name; becomes the output subfolder name</td></tr>
+  <tr><td><code>url</code></td><td>string</td><td>—</td><td>Start URL</td></tr>
+  <tr><td><code>maxPages</code></td><td>number</td><td>200</td><td>Cap on same-origin pages the BFS will visit</td></tr>
+  <tr><td><code>navTimeout</code></td><td>number</td><td>15000</td><td>Per-page navigation timeout (ms)</td></tr>
+  <tr><td><code>includeHash</code></td><td>bool</td><td>false</td><td>Treat <code>#/foo</code> and <code>#/bar</code> as different pages</td></tr>
+</table>
+
+<h3>Modal dismissal</h3>
+<table>
+  <tr><th>Field</th><th>Default</th><th>What it does</th></tr>
+  <tr><td><code>dismiss</code></td><td>none</td><td>Selector(s) clicked after each page load. Comma-separated or array.</td></tr>
+  <tr><td><code>dismissWait</code></td><td>400</td><td>ms to wait after a dismiss click before continuing</td></tr>
+</table>
+
+<h3>Explicit clicks</h3>
+<table>
+  <tr><th>Field</th><th>Default</th><th>What it does</th></tr>
+  <tr><td><code>clicks</code></td><td>[]</td><td>Array of selectors. Each is clicked and captured as a variant screenshot.</td></tr>
+  <tr><td><code>clickMode</code></td><td>sequential</td><td><code>sequential</code> — clicks accumulate on same page. <code>independent</code> — reload between each so state doesn't leak.</td></tr>
+  <tr><td><code>clickWait</code></td><td>500</td><td>ms to wait after each click before screenshotting</td></tr>
+</table>
+
+<h3>Auto-discovery</h3>
+<table>
+  <tr><th>Field</th><th>Default</th><th>What it does</th></tr>
+  <tr><td><code>autoButtons</code></td><td>false</td><td>Discover every <code>button</code> / <code>[role=button]</code> / <code>input[type=button]</code> / <code>input[type=submit]</code> and click each.</td></tr>
+  <tr><td><code>autoButtonsSelector</code></td><td>see above</td><td>Override the discovery selector</td></tr>
+  <tr><td><code>autoButtonsBlocklist</code></td><td><code>delete|remove|clear|stop|reset|pay|confirm|send|logout|sign.?out</code></td><td>Regex (case-insensitive) — any button whose visible text matches is skipped</td></tr>
+  <tr><td><code>autoButtonsMax</code></td><td>40</td><td>Safety cap on buttons per page</td></tr>
+</table>
+
+<h3>Advanced</h3>
+<table>
+  <tr><th>Field</th><th>Default</th><th>What it does</th></tr>
+  <tr><td><code>preSteps</code></td><td>[]</td><td>Setup steps (login, expert-mode toggle). Replayed after every independent reload.</td></tr>
+  <tr><td><code>maxDepth</code></td><td>0</td><td>Recursive exploration depth. <code>1</code> = click A then discover and click more buttons on the new state.</td></tr>
+  <tr><td><code>headful</code></td><td>false</td><td>Show Chromium window — useful for debugging</td></tr>
+</table>
+
+<h2 id="examples">Examples</h2>
+
+<h3>Simplest possible</h3>
+<pre><code>{
+  "apps": [
+    { "name": "my-site", "url": "https://my-site.com" }
+  ]
+}</code></pre>
+<p>→ Crawls same-origin <code>&lt;a href&gt;</code> links, one screenshot per page. No clicking.</p>
+
+<h3>Single page, auto-click everything</h3>
+<pre><code>{
+  "apps": [
+    {
+      "name": "bit-playground",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "autoButtons": true,
+      "maxPages": 1
+    }
+  ]
+}</code></pre>
+
+<h3>Explicit list of buttons</h3>
+<pre><code>{
+  "apps": [
+    {
+      "name": "bit-playground-tabs",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "clickMode": "independent",
+      "clicks": [
+        "#controlsTabBtn",
+        "#sensesTabBtn",
+        "#gamepadTabBtn",
+        "#graphTabBtn"
+      ]
+    }
+  ]
+}</code></pre>
+<div class="tip"><code>independent</code> reloads between each click, so every screenshot shows one tab active from a fresh state.</div>
+
+<h3>Click a specific button at start, then auto-sweep</h3>
+<pre><code>{
+  "apps": [
+    {
+      "name": "bit-playground-expert",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "preSteps": [
+        { "action": "click", "selector": "button:has-text(\"expert\")" }
+      ],
+      "autoButtons": true,
+      "autoButtonsBlocklist": "🌙|⚡|☁️|🔥|beginner",
+      "maxPages": 1
+    }
+  ]
+}</code></pre>
+
+<h3>Many apps in one batch</h3>
+<pre><code>{
+  "apps": [
+    { "name": "home",    "url": "https://my-site.com/",    "autoButtons": true },
+    { "name": "docs",    "url": "https://my-site.com/docs", "autoButtons": true },
+    { "name": "pricing", "url": "https://my-site.com/pricing" }
+  ]
+}</code></pre>
+
+<h2 id="presteps">preSteps action reference</h2>
+<p>Each entry in <code>preSteps</code> is an object with an <code>action</code> field. Runs after goto + dismiss, replays on every independent reload.</p>
+
+<table>
+  <tr><th>Action</th><th>Fields</th><th>Example</th></tr>
+  <tr><td><code>goto</code></td><td><code>value</code> / <code>url</code></td><td><code>{ "action": "goto", "value": "https://x.com/login" }</code></td></tr>
+  <tr><td><code>click</code></td><td><code>selector</code></td><td><code>{ "action": "click", "selector": "#signInBtn" }</code></td></tr>
+  <tr><td><code>fill</code></td><td><code>selector</code>, <code>value</code></td><td><code>{ "action": "fill", "selector": "#email", "value": "a@b.com" }</code></td></tr>
+  <tr><td><code>press</code></td><td><code>selector</code>, <code>value</code> (key)</td><td><code>{ "action": "press", "selector": "#q", "value": "Enter" }</code></td></tr>
+  <tr><td><code>waitForSelector</code></td><td><code>selector</code>, <code>timeout</code>?</td><td><code>{ "action": "waitForSelector", "selector": ".dashboard" }</code></td></tr>
+  <tr><td><code>waitForURL</code></td><td><code>value</code> / <code>url</code>, <code>timeout</code>?</td><td><code>{ "action": "waitForURL", "value": "**/dashboard" }</code></td></tr>
+  <tr><td><code>wait</code></td><td><code>value</code> / <code>ms</code></td><td><code>{ "action": "wait", "value": 1000 }</code></td></tr>
+</table>
+
+<h3>Login flow example</h3>
+<pre><code>{
+  "name": "app-behind-login",
+  "url": "https://app.example.com",
+  "preSteps": [
+    { "action": "fill",       "selector": "input[name=email]",    "value": "demo@example.com" },
+    { "action": "fill",       "selector": "input[name=password]", "value": "hunter2" },
+    { "action": "click",      "selector": "button:has-text(\"Sign in\")" },
+    { "action": "waitForURL", "value": "**/dashboard" }
+  ],
+  "autoButtons": true
+}</code></pre>
+<p>Session cookies and localStorage persist across the browser context, so subsequent page navigations stay authenticated.</p>
+
+<h2 id="recorder">Chrome DevTools Recorder import</h2>
+<ol>
+  <li>DevTools → <strong>Recorder</strong> panel → <em>Start new recording</em></li>
+  <li>Click through the flow you want captured</li>
+  <li>End recording → <strong>Export</strong> → <em>"Export as a JSON file"</em> <span class="mute">(NOT Puppeteer or Playwright — those are JS scripts route-shot can't parse)</span></li>
+  <li>Save as <code>flow.json</code></li>
+</ol>
+
+<p>Then convert:</p>
+<pre><code># print the translated entry to stdout
+node route-shot.js --import-recording flow.json
+
+# or merge directly into apps.json (upsert by name)
+node route-shot.js --import-recording flow.json --name my-app --merge apps.json
+
+# treat the recorded clicks as variants (one screenshot per click) instead of one-shot preSteps
+node route-shot.js --import-recording flow.json --as-clicks --merge apps.json</code></pre>
+
+<table>
+  <tr><th>Flag</th><th>Meaning</th></tr>
+  <tr><td><code>--import-recording &lt;path&gt;</code></td><td>Source Recorder JSON</td></tr>
+  <tr><td><code>--name &lt;name&gt;</code></td><td>Override app name (default: recording title)</td></tr>
+  <tr><td><code>--url &lt;url&gt;</code></td><td>Override start URL</td></tr>
+  <tr><td><code>--as-clicks</code></td><td>Map clicks to <code>clicks[]</code> instead of <code>preSteps[]</code></td></tr>
+  <tr><td><code>--merge &lt;apps.json&gt;</code></td><td>Upsert into the config file</td></tr>
+</table>
+
+<div class="tip">The importer picks the most stable selector candidate from Recorder's list — prefers <code>#id</code> over <code>aria/…</code>, <code>xpath/…</code>, <code>pierce/…</code>, <code>text/…</code> alternatives.</div>
+
+<h2 id="blocklist">Writing blocklist patterns</h2>
+<p><code>autoButtonsBlocklist</code> is a regex tested against each button's visible text. Case-insensitive. <code>|</code> means OR.</p>
+
+<table>
+  <tr><th>Goal</th><th>Pattern</th></tr>
+  <tr><td>Block exactly "Reset"</td><td><code>"^Reset$"</code></td></tr>
+  <tr><td>Block any button containing "reset"</td><td><code>"reset"</code></td></tr>
+  <tr><td>Block multiple texts</td><td><code>"delete|pay|confirm"</code></td></tr>
+  <tr><td>Block emoji-only buttons</td><td><code>"🌙|⚡|☁️|🔥"</code></td></tr>
+  <tr><td>Block nothing (full sweep)</td><td><code>"^$"</code></td></tr>
+  <tr><td>Block literal question mark</td><td><code>"\\?"</code></td></tr>
+</table>
+
+<h3>Finding the right text</h3>
+<p>Run batch once, open <code>screenshots/&lt;app&gt;/index.json</code>:</p>
+<pre><code>"variants": [
+  { "label": "🌙",        "auto": true, "screenshot": "..._emoji_12065.png" },
+  { "label": "Firmware",  "auto": true, "screenshot": "..._Firmware.png"   },
+  { "label": "Controls",  "auto": true, "screenshot": "..._Controls.png"   }
+]</code></pre>
+<p>Copy any <code>label</code> values you don't want and glue them with <code>|</code>.</p>
+
+<h2 id="output">Output layout</h2>
+<pre><code>screenshots/
+├── bit-playground/
+│   ├── 001_abourdim_github_io_bit_playground.png           ← main screenshot
+│   ├── 001_..._bit_playground__v02_Sensors.png             ← tab variant
+│   ├── 001_..._bit_playground__v03_Motors.png              ← tab variant
+│   ├── 001_..._bit_playground__v12_emoji_a3f9k2.png        ← emoji button (hashed)
+│   └── index.json
+├── face-quest/
+└── index.json                                                ← top-level batch roll-up</code></pre>
+
+<h3>Filename anatomy</h3>
+<pre><code>001_abourdim_github_io_bit_playground__v02_d1_Controls__Sensors.png
+│   │                                     │  │  │          │
+│   │                                     │  │  │          └─ leaf-click label
+│   │                                     │  │  └─ depth-1 parent (if maxDepth &gt; 0)
+│   │                                     │  └─ depth indicator
+│   │                                     └─ variant number
+│   └─ URL slug
+└─ page index</code></pre>
+
+<h3>index.json schema</h3>
+<pre><code>{
+  "app": "bit-playground",
+  "start": "https://abourdim.github.io/bit-playground/",
+  "count": 3,
+  "pages": [
+    {
+      "url": "https://abourdim.github.io/bit-playground/",
+      "status": 200,
+      "screenshot": "001_..._bit_playground.png",
+      "variants": [
+        { "label": "Controls", "screenshot": "..._v02_Controls.png", "auto": true },
+        { "label": "Sensors",  "screenshot": "..._v03_Sensors.png",  "auto": true }
+      ]
+    }
+  ]
+}</code></pre>
+
+<h2 id="tips">Tips & gotchas</h2>
+
+<div class="tip"><strong>Don't crawl, just snapshot</strong> — if you only want one screenshot of the landing URL, set <code>"maxPages": 1</code>. Otherwise BFS follows every <code>&lt;a href&gt;</code>.</div>
+
+<div class="tip"><strong>Modal blocks your preSteps?</strong> route-shot now dismisses before preSteps, but if your modal uses a different selector than the one you think, the click will silently fail. Enable <code>"headful": true</code> and watch it happen live.</div>
+
+<div class="tip"><strong>autoButtons captures way too many near-duplicates?</strong> Many buttons on the page may only toggle a tiny visual detail. Use <code>clicks[]</code> with an explicit list instead.</div>
+
+<div class="warn"><strong>Independent mode is expensive</strong> — reloads the page for every single click. With 40 buttons that's 40 full page loads. Budget accordingly or drop <code>autoButtonsMax</code>.</div>
+
+<div class="warn"><strong>Playwright has-text is substring</strong> — <code>has-text("Clear")</code> matches both "Clear" and "Clear All". If you need exact match, use <code>text-is("Clear")</code> or role-based <code>getByRole('button', { name: 'Clear', exact: true })</code> (autoButtons already does this).</div>
+
+<div class="bad"><strong>Never run autoButtons on a production app with real data.</strong> Even with a blocklist, you can't be sure "Save" won't trigger something you don't want. Use a staging env or the default blocklist as a minimum.</div>
+
+<div class="tip"><strong>preSteps don't replay after goto in BFS</strong> — they replay after every independent-mode reload (auto-button variants), but not when the BFS crawls to a new URL. Same-app multi-page flows may lose preSteps state.</div>
+
+<div class="tip"><strong>Session persists</strong> — a single browser context is used for the whole app, so cookies and localStorage survive page navigations. Log in once in preSteps, crawl all pages authenticated.</div>
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3>"Element is not visible, enabled and stable"</h3>
+<p>A modal or overlay is covering the target. Check <code>dismiss</code> selector. Bump <code>dismissWait</code>. Try <code>"headful": true</code> to see it.</p>
+
+<h3>"Not found" / "elementHandle.click: Timeout"</h3>
+<p>Selector doesn't match anything. Two reasons:</p>
+<ul>
+  <li>CSS is case-sensitive for IDs — <code>#ExpertBtn</code> ≠ <code>#expertBtn</code></li>
+  <li>Auto-discovery uses exact role-name match — if the label has weird whitespace or multiple elements share it, disambiguate with an explicit selector in <code>clicks[]</code></li>
+</ul>
+
+<h3>"Unexpected token … is not valid JSON"</h3>
+<p>Usually a trailing comma. Last key in an object, last item in an array — no comma after it.</p>
+<pre><code>{
+  "foo": 1,
+  "bar": 2,   ← OK (not last)
+  "baz": 3    ← no comma!
+}</code></pre>
+
+<h3>Importer says "looks like a Puppeteer/Playwright script export"</h3>
+<p>You exported as Puppeteer/Playwright JS instead of JSON. In the Recorder panel, pick <strong>"Export as a JSON file"</strong> (top of the list).</p>
+
+<h3>Top-nav tabs aren't clicked</h3>
+<p>Happens when multiple elements share the tab text (e.g. a heading plus the button). Fix: add the tab buttons to <code>clicks[]</code> using ID selectors like <code>#controlsTabBtn</code>. Auto-discovery will skip them thanks to dedup.</p>
+
+<h3>Welcome modal keeps coming back every screenshot</h3>
+<p>Independent mode reloads for every click, so the modal re-renders each time. Dismiss handles this. If it's still visible in screenshots, either <code>dismissWait</code> is too short or the selector is wrong.</p>
+
+<h2 id="glossary">Glossary</h2>
+<table>
+  <tr><td><strong>BFS</strong></td><td>Breadth-first search. route-shot's link crawling: visits the start URL, then every <code>&lt;a href&gt;</code> it finds, then theirs, and so on — level by level.</td></tr>
+  <tr><td><strong>Variant</strong></td><td>A screenshot of the same URL after a click. Captured as <code>..._v01_&lt;label&gt;.png</code>.</td></tr>
+  <tr><td><strong>Independent mode</strong></td><td>Each click starts from a fresh reload. Prevents state leaking between clicks. Slower but cleaner.</td></tr>
+  <tr><td><strong>Sequential mode</strong></td><td>Clicks accumulate. Matches tab-like navigation where state should persist.</td></tr>
+  <tr><td><strong>preSteps</strong></td><td>Setup actions (login, toggles) run once at start and replayed on every independent reload.</td></tr>
+  <tr><td><strong>dismiss</strong></td><td>Selector(s) clicked immediately after every page load — typically onboarding modals, cookie banners.</td></tr>
+  <tr><td><strong>Recorder</strong></td><td>Chrome DevTools' Recorder panel. Records user interactions, exports to JSON / Puppeteer / Playwright. route-shot only consumes the JSON.</td></tr>
+  <tr><td><strong>Blocklist</strong></td><td>Regex of button texts to skip during <code>autoButtons</code> discovery. Prevents clicking destructive actions.</td></tr>
+</table>
+
+<footer>
+  route-shot · <a href="https://github.com/abourdim/route-shot">github.com/abourdim/route-shot</a> · MIT license
+</footer>
+
+</div>
+</body>
+</html>
