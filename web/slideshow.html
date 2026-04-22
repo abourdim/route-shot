@@ -6,103 +6,347 @@
 <!--
   Opened by the dashboard in a Playwright context at the target platform
   dimensions (1080×1920 reel, 1080×1080 square, etc). Plays the configured
-  slide sequence and records it via MediaRecorder API — the server polls
-  window.__slideshowVideoBlob then downloads via evaluate(arrayBuffer).
-  Query params:
-    ?config=<JSON url-encoded>
-  config shape: { frames:[{img,caption,note,durationMs,transition}], fps, audio, watermark, credits }
+  slide sequence and is captured via recordVideo.
+  Query params: ?config=<JSON url-encoded>
+  config shape: {
+    frames:[{img,caption,note,durationMs}],
+    fps, watermark,
+    style: 'minimal'|'dynamic'|'3d'|'hacker'|'maker'|'anonymous',
+    bgMusic?: 'url'
+  }
 -->
+<link rel="stylesheet" href="effects.css">
 <style>
   html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden;
-    background:#000; color:#fff; font-family:system-ui, -apple-system, sans-serif; }
-  #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
-  .slide { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    opacity:0; will-change:opacity, transform; background:#000; }
+    background:#000; color:#fff; font-family:system-ui, -apple-system, sans-serif;
+    perspective: 1600px; perspective-origin: 50% 50%; }
+  #stage { position:absolute; inset:0; transform-style: preserve-3d; }
+  .slide {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    opacity:0; will-change:opacity, transform; background:#000;
+    backface-visibility: hidden;
+  }
   .slide.show { opacity:1; }
-  .slide img { max-width:94%; max-height:84%; width:auto; height:auto; object-fit:contain;
-    box-shadow:0 16px 64px rgba(0,0,0,0.6); border-radius:8px; will-change:transform; }
+  .slide img {
+    max-width:92%; max-height:82%; object-fit:contain;
+    box-shadow:0 16px 64px rgba(0,0,0,0.6); border-radius:10px;
+    will-change:transform;
+  }
   .lower {
-    position:absolute; left:0; right:0; bottom:6%; padding:16px 32px; text-align:center;
-    font-size:clamp(20px, 3.2vw, 42px); font-weight:700; letter-spacing:-0.01em;
-    text-shadow:0 2px 8px rgba(0,0,0,0.8); color:#fff; pointer-events:none;
+    position:absolute; left:4%; right:4%; bottom:8%; padding:14px 28px; text-align:center;
+    font-size:clamp(22px, 3.4vw, 46px); font-weight:800; letter-spacing:-0.01em; line-height:1.15;
+    text-shadow:0 3px 10px rgba(0,0,0,0.85); color:#fff; pointer-events:none;
   }
   .note {
-    position:absolute; left:0; right:0; bottom:2%; text-align:center;
-    font-size:clamp(12px, 1.6vw, 20px); color:rgba(255,255,255,0.75);
-    text-shadow:0 1px 4px rgba(0,0,0,0.8); pointer-events:none;
+    position:absolute; left:0; right:0; bottom:3%; text-align:center;
+    font-size:clamp(13px, 1.6vw, 20px); color:rgba(255,255,255,0.85);
+    text-shadow:0 1px 4px rgba(0,0,0,0.85); pointer-events:none;
   }
   .watermark {
-    position:absolute; right:20px; bottom:20px; opacity:0.8; font-size:12px;
-    color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.6); pointer-events:none;
+    position:absolute; right:24px; bottom:24px; opacity:0.85; font-size:13px;
+    color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.7); pointer-events:none;
+    padding:6px 12px; border-radius:999px; background:rgba(0,0,0,0.35);
+    backdrop-filter: blur(8px);
   }
-  /* Ken-Burns zoom */
-  @keyframes kb { from { transform:scale(1); } to { transform:scale(1.08); } }
-  .kb img { animation:kb linear forwards; }
+
+  /* --- style backgrounds ------------------------------------------------ */
+  body.style-dynamic,
+  body.style-3d       { background: linear-gradient(135deg, #0d1117 0%, #1a1f2e 50%, #0d1117 100%); }
+
+  /* HACKER — black + matrix rain + scanlines + green accent */
+  body.style-hacker { background:#000; color:#00ff9c; font-family:"SF Mono","Cascadia Code",Consolas,monospace; }
+  body.style-hacker::before {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(0,255,156,0.06) 0px,
+        rgba(0,255,156,0.06) 1px,
+        transparent 1px,
+        transparent 3px);
+  }
+  body.style-hacker::after {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:2;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0,255,156,0.12) 0 2px,
+      transparent 2px 20px);
+    background-size:100% 220px;
+    animation: matrixScroll 3s linear infinite;
+    opacity:0.35;
+    mix-blend-mode: screen;
+  }
+  @keyframes matrixScroll { from { background-position:0 0 } to { background-position:0 220px } }
+  body.style-hacker .lower { color:#00ff9c; font-family:inherit; font-weight:700; letter-spacing:0.02em;
+    text-shadow:0 0 8px rgba(0,255,156,0.7), 0 0 2px rgba(0,255,156,1); }
+  body.style-hacker .lower::before {
+    content:"> "; color:#00ff9c; opacity:0.6;
+  }
+  body.style-hacker .lower::after {
+    content:"_"; display:inline-block; animation:blink 1s step-end infinite; margin-left:4px;
+  }
+  @keyframes blink { 50% { opacity:0 } }
+  body.style-hacker .slide img { filter: saturate(0.9) contrast(1.05); border: 1px solid rgba(0,255,156,0.4); box-shadow: 0 0 48px rgba(0,255,156,0.3); }
+  body.style-hacker .slide.show img { animation: kb linear forwards, glitchRgb 2.8s steps(1) infinite; }
+  @keyframes glitchRgb {
+    0%, 96%, 100% { filter: saturate(0.9) contrast(1.05) drop-shadow(0 0 0 transparent); }
+    97%  { filter: saturate(0.9) contrast(1.05) drop-shadow(2px 0 0 #ff003c) drop-shadow(-2px 0 0 #00e1ff); transform:translateX(2px) scale(1.004); }
+    98%  { filter: saturate(0.9) contrast(1.05) drop-shadow(-3px 0 0 #ff003c) drop-shadow(3px 0 0 #00e1ff); transform:translateX(-3px); }
+    99%  { filter: saturate(0.9) contrast(1.1)  drop-shadow(1px 0 0 #ff003c) drop-shadow(-1px 0 0 #00e1ff); transform:translateX(0); }
+  }
+
+  /* MAKER — dark with PCB grid, amber accent, solder-trace pulses */
+  body.style-maker { background:#0a1f0a; color:#ffb347; font-family:"SF Mono",Consolas,monospace; }
+  body.style-maker::before {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background-image:
+      linear-gradient(rgba(255,179,71,0.09) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,179,71,0.09) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  body.style-maker::after {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:2;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(255,179,71,0.15) 0, transparent 8%),
+      radial-gradient(circle at 80% 70%, rgba(255,179,71,0.15) 0, transparent 8%),
+      radial-gradient(circle at 50% 90%, rgba(255,179,71,0.15) 0, transparent 8%);
+    animation: pcbPulse 3.5s ease-in-out infinite;
+  }
+  @keyframes pcbPulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }
+  body.style-maker .lower { color:#ffb347; font-family:inherit; font-weight:700;
+    text-shadow: 0 0 8px rgba(255,179,71,0.6); }
+  body.style-maker .lower::before { content:"▸ "; color:#ffb347; }
+  body.style-maker .slide img { border: 1px solid rgba(255,179,71,0.35); box-shadow: 0 0 48px rgba(255,179,71,0.22); }
+
+  /* ANONYMOUS — monochrome, CRT scanlines, glitch bars */
+  body.style-anonymous { background:#05050a; color:#e8e8ea; font-family:"Fira Sans","Helvetica Neue",sans-serif; }
+  body.style-anonymous::before {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.04) 0 1px,
+      transparent 1px 3px);
+  }
+  body.style-anonymous::after {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:2;
+    background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.6) 100%);
+    animation: crtRoll 6s linear infinite;
+  }
+  @keyframes crtRoll { from { background-position:0 0 } to { background-position:0 -100vh } }
+  body.style-anonymous .lower { color:#fff; font-weight:900; letter-spacing:0.08em; text-transform:uppercase;
+    animation: rgbSplit 4s infinite; }
+  @keyframes rgbSplit {
+    0%, 94%, 100% { text-shadow:0 3px 10px rgba(0,0,0,0.85); }
+    95%  { text-shadow: -2px 0 #00e1ff, 2px 0 #ff003c; }
+    96%  { text-shadow: 3px 0 #00e1ff, -3px 0 #ff003c; }
+  }
+  body.style-anonymous .slide img { filter: grayscale(0.35) contrast(1.08); }
+  body.style-anonymous .slide.show img { animation: kb linear forwards, vhs 4s steps(1) infinite; }
+  @keyframes vhs {
+    0%, 97%, 100% { transform:none; filter: grayscale(0.35) contrast(1.08); }
+    98% { transform: translateY(2px) skewX(0.3deg); filter: grayscale(0.35) contrast(1.15) drop-shadow(-1px 0 0 #00e1ff) drop-shadow(1px 0 0 #ff003c); }
+  }
+
+  /* --- transitions (shared across styles) ------------------------------ */
+  .t-fade-in   { animation: fadeIn    var(--tin) ease forwards; }
+  .t-fade-out  { animation: fadeOut   var(--tout) ease forwards; }
+  @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+  @keyframes fadeOut { from { opacity:1 } to { opacity:0 } }
+
+  .t-slideL-in  { animation: slideL_in  var(--tin) cubic-bezier(.22,1,.36,1) forwards; }
+  .t-slideL-out { animation: slideL_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+  @keyframes slideL_in  { from { opacity:0; transform:translate3d( 40%,0,0) }  to { opacity:1; transform:none } }
+  @keyframes slideL_out { from { opacity:1; transform:none }                   to { opacity:0; transform:translate3d(-40%,0,0) } }
+
+  .t-slideU-in  { animation: slideU_in  var(--tin) cubic-bezier(.22,1,.36,1) forwards; }
+  .t-slideU-out { animation: slideU_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+  @keyframes slideU_in  { from { opacity:0; transform:translate3d(0, 40%,0) }   to { opacity:1; transform:none } }
+  @keyframes slideU_out { from { opacity:1; transform:none }                    to { opacity:0; transform:translate3d(0,-40%,0) } }
+
+  .t-zoom-in   { animation: zoom_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+  .t-zoom-out  { animation: zoom_out var(--tout) cubic-bezier(.5,0,.75,0)  forwards; }
+  @keyframes zoom_in  { from { opacity:0; transform:scale(0.6) }  to { opacity:1; transform:scale(1) } }
+  @keyframes zoom_out { from { opacity:1; transform:scale(1) }    to { opacity:0; transform:scale(1.3) } }
+
+  .t-cubeY-in  { animation: cubeY_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+  .t-cubeY-out { animation: cubeY_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+  @keyframes cubeY_in  { from { opacity:0; transform:rotateY(-90deg) translateZ(50vw) } to { opacity:1; transform:rotateY(0) translateZ(0) } }
+  @keyframes cubeY_out { from { opacity:1; transform:rotateY(0) translateZ(0) }         to { opacity:0; transform:rotateY( 90deg) translateZ(50vw) } }
+
+  .t-cubeX-in  { animation: cubeX_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+  .t-cubeX-out { animation: cubeX_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+  @keyframes cubeX_in  { from { opacity:0; transform:rotateX( 90deg) translateZ(50vh) } to { opacity:1; transform:rotateX(0) translateZ(0) } }
+  @keyframes cubeX_out { from { opacity:1; transform:rotateX(0) translateZ(0) }         to { opacity:0; transform:rotateX(-90deg) translateZ(50vh) } }
+
+  .t-flip-in   { animation: flip_in  var(--tin)  ease forwards; }
+  .t-flip-out  { animation: flip_out var(--tout) ease forwards; }
+  @keyframes flip_in  { from { opacity:0; transform:rotateY(-180deg) } to { opacity:1; transform:none } }
+  @keyframes flip_out { from { opacity:1; transform:none }              to { opacity:0; transform:rotateY( 180deg) } }
+
+  .t-glitch-in  { animation: glitchIn  var(--tin) steps(6) forwards; }
+  .t-glitch-out { animation: glitchOut var(--tout) steps(6) forwards; }
+  @keyframes glitchIn  {
+    0%   { opacity:0; transform:translateX(-8px) skewX(-3deg); filter:drop-shadow(-4px 0 0 #ff003c) drop-shadow(4px 0 0 #00e1ff); }
+    40%  { opacity:1; transform:translateX( 8px) skewX( 3deg); filter:drop-shadow( 4px 0 0 #ff003c) drop-shadow(-4px 0 0 #00e1ff); }
+    80%  { opacity:1; transform:translateX(-2px) skewX(0);     filter:drop-shadow( 1px 0 0 #ff003c) drop-shadow(-1px 0 0 #00e1ff); }
+    100% { opacity:1; transform:none;                          filter:none; }
+  }
+  @keyframes glitchOut {
+    0%   { opacity:1; transform:none; filter:none; }
+    50%  { opacity:1; transform:translateX( 6px) skewX( 4deg); filter:drop-shadow( 4px 0 0 #ff003c) drop-shadow(-4px 0 0 #00e1ff); }
+    100% { opacity:0; transform:translateX(-20px) skewX(-4deg); filter:drop-shadow(-8px 0 0 #ff003c); }
+  }
+
+  /* Ken-Burns zoom — applied to img via class kb */
+  @keyframes kb { from { transform:scale(1) translate3d(0,0,0); } to { transform:scale(1.08) translate3d(-2%,-1%,0); } }
+  .slide.kb img { animation: kb linear forwards; }
+
+  /* Caption entrance — fades up, lingers, no frills */
+  .lower.enter { animation: capIn 900ms cubic-bezier(.2,1,.3,1) .2s backwards; }
+  @keyframes capIn { from { opacity:0; transform:translateY(40px); letter-spacing:0.15em; } to { opacity:1; } }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="watermark" class="watermark"></div>
+<audio id="bgmusic" loop></audio>
 <script>
   const cfg = (() => {
     const raw = new URLSearchParams(location.search).get('config');
     try { return JSON.parse(decodeURIComponent(raw || '{}')); } catch { return {}; }
   })();
   const frames = cfg.frames || [];
-  const fps = cfg.fps || 30;
-  const stage = document.getElementById('stage');
+  const style  = cfg.style || 'minimal';
+  const stage  = document.getElementById('stage');
+  document.body.classList.add('style-' + style);
   if (cfg.watermark) document.getElementById('watermark').textContent = cfg.watermark;
+  if (cfg.bgMusic) {
+    const a = document.getElementById('bgmusic');
+    a.src = cfg.bgMusic; a.volume = 0.5;
+  }
+
+  // Transition palette per style — each entry is a list of [in,out] pairs.
+  // Style rotates through the list slide-by-slide.
+  const FADE       = ['t-fade-in',   't-fade-out'];
+  const SLIDE_L    = ['t-slideL-in', 't-slideL-out'];
+  const SLIDE_R    = ['t-slideR-in', 't-slideR-out'];
+  const SLIDE_U    = ['t-slideU-in', 't-slideU-out'];
+  const ZOOM       = ['t-zoom-in',   't-zoom-out'];
+  const CUBE_Y     = ['t-cubeY-in',  't-cubeY-out'];
+  const CUBE_X     = ['t-cubeX-in',  't-cubeX-out'];
+  const FLIP       = ['t-flip-in',   't-flip-out'];
+  const GLITCH     = ['t-glitch-in', 't-glitch-out'];
+  const POP        = ['t-pop-in',    't-pop-out'];
+  const IRIS       = ['t-iris-in',   't-iris-out'];
+  const BLINDS     = ['t-blinds-in', 't-blinds-out'];
+  const palette = {
+    minimal:     [FADE],
+    dynamic:     [SLIDE_L, SLIDE_U, ZOOM, FADE],
+    '3d':        [CUBE_Y, CUBE_X, FLIP, ZOOM],
+    cinematic:   [FADE, ZOOM],
+    documentary: [SLIDE_L, FADE],
+    hacker:      [GLITCH, FADE],
+    maker:       [SLIDE_U, ZOOM],
+    anonymous:   [GLITCH, SLIDE_U],
+    terminal:    [FADE, GLITCH],
+    cyberpunk:   [GLITCH, ZOOM, POP],
+    oscilloscope:[BLINDS, FADE],
+    blueprint:   [BLINDS, SLIDE_U],
+    nasa:        [IRIS, FADE, ZOOM],
+    cosmos:      [FADE, ZOOM],
+    starfield:   [ZOOM, IRIS],
+    nebula:      [FADE, ZOOM],
+    wormhole:    [ZOOM, IRIS],
+    satellite:   [BLINDS, FADE],
+    particle:    [FADE, ZOOM],
+    'lab-notebook': [SLIDE_R, SLIDE_U],
+    'retro-80s': [SLIDE_L, POP, ZOOM],
+    vhs:         [GLITCH, SLIDE_U],
+    'film-noir': [FADE, IRIS],
+    polaroid:    [POP, FADE],
+    chalkboard:  [FADE, SLIDE_U],
+    comic:       [POP, SLIDE_L],
+    holographic: [IRIS, FADE],
+    'neon-outline': [FADE, IRIS],
+    magazine:    [SLIDE_L, FADE],
+    museum:      [FADE],
+    paper:       [SLIDE_U, FADE],
+    radar:       [IRIS, FADE],
+  };
 
   function buildSlide(f) {
     const s = document.createElement('div');
-    s.className = 'slide' + (f.kenBurns !== false ? ' kb' : '');
+    s.className = 'slide kb';
     const img = document.createElement('img');
     img.src = f.img;
     img.style.animationDuration = ((f.durationMs || 2500) + 400) + 'ms';
     s.appendChild(img);
-    if (f.caption) { const l = document.createElement('div'); l.className = 'lower'; l.textContent = f.caption; s.appendChild(l); }
-    if (f.note)    { const n = document.createElement('div'); n.className = 'note';  n.textContent = f.note;    s.appendChild(n); }
+    if (f.caption) {
+      const l = document.createElement('div'); l.className = 'lower';
+      // Hacker style: type the caption character-by-character.
+      if (style === 'hacker') l.dataset.typeText = f.caption;
+      else l.textContent = f.caption;
+      s.appendChild(l);
+    }
+    if (f.note) {
+      const n = document.createElement('div'); n.className = 'note'; n.textContent = f.note;
+      s.appendChild(n);
+    }
     return s;
   }
 
-  async function preload() {
-    await Promise.all(frames.map((f) => new Promise((res) => {
+  function preload() {
+    return Promise.all(frames.map((f) => new Promise((res) => {
       const i = new Image(); i.onload = i.onerror = () => res(); i.src = f.img;
     })));
   }
 
+  async function typewriter(el, text) {
+    el.textContent = '';
+    for (let i = 0; i < text.length; i++) {
+      el.textContent += text[i];
+      await new Promise((r) => setTimeout(r, 35 + Math.random() * 25));
+    }
+  }
+
   async function play() {
     await preload();
-    // Prepare all slides up front so transitions can cross-fade.
-    const nodes = frames.map((f) => {
-      const s = buildSlide(f);
+    const picks = palette[style] || palette.minimal;
+    const nodes = frames.map((f, i) => {
+      const s = buildSlide(f, i);
+      const [ci, co] = picks[i % picks.length];
+      s.dataset.in = ci; s.dataset.out = co;
       stage.appendChild(s);
       return s;
     });
-    const fade = 400;  // ms cross-fade
-    window.__slideshowDurationMs = frames.reduce((a, f) => a + (f.durationMs || 2500), 0) + fade;
+    const tin  = style === '3d' || style === 'anonymous' ? 900 : 650;
+    const tout = tin;
+    window.__slideshowDurationMs = frames.reduce((a, f) => a + (f.durationMs || 2500), 0) + tout;
     window.__slideshowReady = true;
-    // Wait for external "start" signal so the recorder can spin up first.
     await new Promise((res) => {
-      Object.defineProperty(window, '__slideshowStart', {
-        set: () => res(),
-        configurable: true,
-      });
+      Object.defineProperty(window, '__slideshowStart', { set: () => res(), configurable: true });
       if (window.__slideshowStart) res();
     });
+    try { document.getElementById('bgmusic').play().catch(() => {}); } catch {}
     for (let i = 0; i < nodes.length; i++) {
-      const f = frames[i];
-      const dur = f.durationMs || 2500;
-      nodes[i].style.transition = 'opacity ' + fade + 'ms ease';
-      nodes[i].classList.add('show');
-      if (i > 0) {
-        nodes[i - 1].classList.remove('show');
+      const n = nodes[i];
+      const dur = frames[i].durationMs || 2500;
+      n.style.setProperty('--tin',  tin  + 'ms');
+      n.style.setProperty('--tout', tout + 'ms');
+      if (i > 0) { const prev = nodes[i - 1]; prev.classList.remove('show'); prev.classList.add(prev.dataset.out); }
+      n.classList.add('show'); n.classList.add(n.dataset.in);
+      const cap = n.querySelector('.lower');
+      if (cap) {
+        cap.classList.add('enter');
+        if (cap.dataset.typeText) typewriter(cap, cap.dataset.typeText);
       }
       await new Promise((r) => setTimeout(r, dur));
     }
-    // Fade out the last slide then flag done.
-    if (nodes.length) nodes[nodes.length - 1].classList.remove('show');
-    await new Promise((r) => setTimeout(r, fade));
+    if (nodes.length) {
+      const last = nodes[nodes.length - 1];
+      last.classList.remove('show'); last.classList.add(last.dataset.out);
+    }
+    await new Promise((r) => setTimeout(r, tout));
     window.__slideshowDone = true;
   }
   play();

@@ -303,86 +303,131 @@ function rmrf(dir) {
 // Build a self-contained gallery.html — every image inlined as base64 so
 // the file can be dropped anywhere (USB, email, GitHub Pages) and still work
 // offline. Keyboard nav (arrows, space, F), click-to-zoom, thumbnail rail.
+// List of themeable styles — serious sci/NASA/maker/hacker vibes, no confetti.
+// Kept in sync with web/effects.css and the slideshow palette.
+const GALLERY_STYLES = [
+  'minimal','dynamic','3d','cinematic','documentary',
+  'hacker','maker','anonymous','terminal','cyberpunk','oscilloscope','blueprint',
+  'nasa','cosmos','starfield','nebula','wormhole','satellite','particle','lab-notebook',
+  'retro-80s','vhs','film-noir','polaroid','chalkboard','comic',
+  'holographic','neon-outline','magazine','museum','paper','radar',
+];
+const GALLERY_TRANSITIONS = [
+  't-fade-in','t-slideL-in','t-slideR-in','t-slideU-in','t-zoom-in',
+  't-cubeY-in','t-cubeX-in','t-flip-in','t-glitch-in','t-pop-in',
+  't-iris-in','t-blinds-in',
+];
+
 function buildGalleryHtml(title, slides) {
   const safe = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
   const slidesJson = JSON.stringify(slides);
+  // Inline the shared effects stylesheet so the generated gallery.html is
+  // self-contained (works offline, over email, on USB, on GitHub Pages).
+  let effectsCss = '';
+  try { effectsCss = fs.readFileSync(path.join(WEB, 'effects.css'), 'utf8'); } catch {}
+  const styleOptions = GALLERY_STYLES.map((s) => `<option value="${s}">${s}</option>`).join('');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <title>${safe(title)} — gallery</title>
 <style>
+/* ===== inlined effects.css ===== */
+${effectsCss}
+/* ===== gallery shell ===== */
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; background: #0d1117; color: #f0f6fc;
-    font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
-  body.print { overflow: visible; }
-  header { display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 20px; border-bottom: 1px solid #30363d; background: #161b22; }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  header .meta { color: #8b949e; font-size: 13px; }
-  main { display: grid; grid-template-rows: 1fr 100px; height: calc(100vh - 54px); }
-  .stage { position: relative; display: flex; align-items: center; justify-content: center;
-    padding: 24px; overflow: hidden; }
-  .stage img { max-width: 94%; max-height: 94%; object-fit: contain; border-radius: 6px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5); background: #000; cursor: zoom-in; }
-  .caption { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center;
-    font-size: 18px; font-weight: 600; padding: 6px 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.7); }
-  .note { position: absolute; left: 20px; top: 20px; max-width: 40%;
-    font-size: 12px; color: #8b949e; background: rgba(0,0,0,0.4); padding: 6px 10px; border-radius: 4px; }
-  .rail { display: flex; gap: 6px; overflow-x: auto; padding: 10px; border-top: 1px solid #30363d; background: #161b22; }
-  .rail img { height: 80px; width: auto; border-radius: 3px; opacity: 0.55; cursor: pointer;
-    transition: opacity 0.15s, transform 0.15s; flex: 0 0 auto; }
-  .rail img.active { opacity: 1; outline: 2px solid #58a6ff; }
-  .rail img:hover { opacity: 0.9; }
-  .hint { position: fixed; right: 12px; bottom: 120px; font-size: 11px; color: #8b949e;
-    background: rgba(0,0,0,0.6); padding: 6px 10px; border-radius: 4px; pointer-events: none; }
-  /* Print / PDF layout: one slide per page. */
+  html, body { margin:0; padding:0; height:100%; font-family:system-ui,-apple-system,sans-serif;
+    overflow:hidden; perspective:1600px; }
+  html { background:#0d1117; color:#f0f6fc; }
+  body.print { overflow:visible; }
+  header { position:relative; z-index:10; display:flex; align-items:center; justify-content:space-between;
+    padding:10px 18px; border-bottom:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.55); backdrop-filter: blur(10px); }
+  header h1 { margin:0; font-size:16px; font-weight:700; }
+  header .meta { color:#aaa; font-size:12px; }
+  header .ctl { display:flex; gap:6px; align-items:center; }
+  header button, header select { padding:5px 10px; font-size:12px; background:#30363d; color:#f0f6fc;
+    border:0; border-radius:4px; cursor:pointer; }
+  header button.on { background:#58a6ff; color:#000; }
+  main { display:grid; grid-template-rows:1fr 92px; height:calc(100vh - 50px); }
+  .stage { position:relative; display:flex; align-items:center; justify-content:center;
+    padding:24px; overflow:hidden; transform-style:preserve-3d; }
+  .stage img { max-width:94%; max-height:94%; object-fit:contain; border-radius:6px;
+    box-shadow:0 12px 40px rgba(0,0,0,0.5); background:#000; cursor:zoom-in;
+    will-change:transform, opacity; backface-visibility:hidden; }
+  #cap.lower { position:absolute; left:4%; right:4%; bottom:6%; text-align:center;
+    padding:6px 20px; }
+  .note { position:absolute; left:20px; top:20px; max-width:40%; font-size:12px;
+    color:#8b949e; background:rgba(0,0,0,0.4); padding:6px 10px; border-radius:4px; z-index:3; }
+  .rail { display:flex; gap:6px; overflow-x:auto; padding:10px; border-top:1px solid rgba(255,255,255,0.1);
+    background:rgba(0,0,0,0.55); backdrop-filter: blur(10px); }
+  .rail img { height:72px; width:auto; border-radius:3px; opacity:0.55; cursor:pointer;
+    transition:opacity 0.15s, transform 0.15s; flex:0 0 auto; }
+  .rail img.active { opacity:1; outline:2px solid #58a6ff; }
+  .rail img:hover { opacity:0.9; }
+  .hint { position:fixed; right:12px; bottom:108px; font-size:11px; color:#aaa;
+    background:rgba(0,0,0,0.6); padding:6px 10px; border-radius:4px; pointer-events:none; z-index:10; }
   @media print {
-    html, body { overflow: visible; height: auto; background: white; color: black; }
-    header, .rail, .hint { display: none !important; }
-    main { display: block !important; height: auto; }
-    .stage { page-break-after: always; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; width: 100vw; height: 100vh; padding: 20px; }
-    .stage img { max-height: 85vh; max-width: 90vw; box-shadow: none; background: transparent; }
-    .caption { position: static; color: #222; text-shadow: none; margin-top: 12px; }
-    .note { position: static; color: #555; background: transparent; margin-top: 4px; max-width: none; }
+    html, body { overflow:visible; height:auto; background:white; color:black; }
+    header, .rail, .hint { display:none !important; }
+    main { display:block !important; height:auto; }
+    .stage { page-break-after:always; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; width:100vw; height:100vh; padding:20px; }
+    .stage img { max-height:85vh; max-width:90vw; box-shadow:none; background:transparent; }
+    #cap.lower { position:static; color:#222; margin-top:12px; }
+    .note { position:static; color:#555; background:transparent; margin-top:4px; max-width:none; }
   }
-  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: none;
-    align-items: center; justify-content: center; z-index: 100; }
-  .lightbox.show { display: flex; }
-  .lightbox img { max-width: 96vw; max-height: 96vh; }
+  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,0.95); display:none;
+    align-items:center; justify-content:center; z-index:100; }
+  .lightbox.show { display:flex; }
+  .lightbox img { max-width:96vw; max-height:96vh; }
 </style>
 </head><body>
 <header>
   <h1>${safe(title)}</h1>
-  <div class="meta"><span id="idx">1</span> / ${slides.length} · ← → space · F fullscreen</div>
+  <div class="meta"><span id="idx">1</span> / ${slides.length} · ← → space · F fullscreen · S shuffle style</div>
+  <div class="ctl">
+    <select id="styleSel" title="Visual theme">${styleOptions}</select>
+    <button id="playBtn" title="Auto-advance (space)">▶ Play</button>
+    <button id="demoBtn" title="Demo mode: random style + transitions on every slide">✨ Demo</button>
+  </div>
 </header>
 <main id="main">
   <div class="stage">
     <img id="shot" alt="">
     <div id="note" class="note"></div>
-    <div id="cap" class="caption"></div>
+    <div id="cap" class="lower"></div>
   </div>
   <div class="rail" id="rail"></div>
 </main>
-<div class="hint">← / → navigate · space play · F fullscreen · Esc exit</div>
+<div class="hint">← / → navigate · space play · S shuffle · F fullscreen · Esc exit</div>
 <div id="lb" class="lightbox"><img id="lbImg"></div>
 <script>
 const slides = ${slidesJson};
+const STYLES = ${JSON.stringify(GALLERY_STYLES)};
+const TRANSITIONS = ${JSON.stringify(GALLERY_TRANSITIONS)};
 const rail = document.getElementById('rail');
 const shot = document.getElementById('shot');
 const cap  = document.getElementById('cap');
 const note = document.getElementById('note');
 const idx  = document.getElementById('idx');
 let i = 0, playing = false, playTimer = null;
+
+function setStyle(name) {
+  if (!STYLES.includes(name)) return;
+  STYLES.forEach((s) => document.body.classList.remove('style-' + s));
+  document.body.classList.add('style-' + name);
+  const sel = document.getElementById('styleSel'); if (sel) sel.value = name;
+}
+setStyle('minimal');
+
 // Print mode: emit every slide inline, one per page, so @media print paginates.
 if (new URLSearchParams(location.search).get('print') === '1') {
   document.body.classList.add('print');
   const m = document.getElementById('main'); m.innerHTML = '';
   slides.forEach((s) => {
     const d = document.createElement('div'); d.className = 'stage';
-    d.innerHTML = '<img src="' + s.src + '"><div class="caption">' + (s.caption || s.name) + '</div>' +
+    d.innerHTML = '<img src="' + s.src + '"><div class="lower" id="cap-p">' + (s.caption || s.name) + '</div>' +
       (s.note ? '<div class="note">' + s.note + '</div>' : '');
     m.appendChild(d);
   });
@@ -393,6 +438,13 @@ if (new URLSearchParams(location.search).get('print') === '1') {
     t.onclick = () => show(ii);
     rail.appendChild(t);
   });
+  function clearAnim() { TRANSITIONS.forEach((c) => shot.classList.remove(c)); }
+  function triggerEntry(trans) {
+    clearAnim(); void shot.offsetWidth;  // force reflow
+    shot.style.setProperty('--tin',  '800ms');
+    shot.style.setProperty('--tout', '800ms');
+    shot.classList.add(trans);
+  }
   function show(n) {
     i = Math.max(0, Math.min(slides.length - 1, n));
     const s = slides[i];
@@ -403,15 +455,39 @@ if (new URLSearchParams(location.search).get('print') === '1') {
     [...rail.children].forEach((t, tt) => t.classList.toggle('active', tt === i));
     const active = rail.children[i];
     if (active) active.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    if (document.body.classList.contains('demo')) {
+      // Pick a random transition per slide, and a random style every 3 slides.
+      triggerEntry(TRANSITIONS[(Math.random() * TRANSITIONS.length) | 0]);
+      if (i % 3 === 0) setStyle(STYLES[(Math.random() * STYLES.length) | 0]);
+    } else {
+      // Even outside demo mode give a small fade on swap.
+      triggerEntry('t-fade-in');
+    }
   }
   show(0);
   shot.onclick = () => { document.getElementById('lbImg').src = shot.src; document.getElementById('lb').classList.add('show'); };
   document.getElementById('lb').onclick = () => document.getElementById('lb').classList.remove('show');
   function togglePlay() {
     playing = !playing;
-    if (playing) playTimer = setInterval(() => { show((i + 1) % slides.length); }, 2500);
+    const pb = document.getElementById('playBtn');
+    if (pb) { pb.classList.toggle('on', playing); pb.textContent = playing ? '⏸ Pause' : '▶ Play'; }
+    if (playing) playTimer = setInterval(() => { show((i + 1) % slides.length); }, 3000);
     else { clearInterval(playTimer); playTimer = null; }
   }
+  function toggleDemo() {
+    document.body.classList.toggle('demo');
+    const db = document.getElementById('demoBtn');
+    const on = document.body.classList.contains('demo');
+    if (db) db.classList.toggle('on', on);
+    if (on) {
+      if (!playing) togglePlay();
+      setStyle(STYLES[(Math.random() * STYLES.length) | 0]);
+      show(i);
+    }
+  }
+  document.getElementById('styleSel')?.addEventListener('change', (e) => setStyle(e.target.value));
+  document.getElementById('playBtn')?.addEventListener('click', togglePlay);
+  document.getElementById('demoBtn')?.addEventListener('click', toggleDemo);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight') show(i + 1);
     else if (e.key === 'ArrowLeft') show(i - 1);
@@ -419,6 +495,8 @@ if (new URLSearchParams(location.search).get('print') === '1') {
     else if (e.key.toLowerCase() === 'f') {
       if (document.fullscreenElement) document.exitFullscreen();
       else document.documentElement.requestFullscreen();
+    } else if (e.key.toLowerCase() === 's') {
+      setStyle(STYLES[(Math.random() * STYLES.length) | 0]);
     } else if (e.key === 'Escape') {
       document.getElementById('lb').classList.remove('show');
       if (playing) togglePlay();
@@ -496,6 +574,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/promo.html')     return serveFile(res, path.join(WEB, 'promo.html'));
     if (pathname === '/slideshow.html') return serveFile(res, path.join(WEB, 'slideshow.html'));
+    if (pathname === '/effects.css')    return serveFile(res, path.join(WEB, 'effects.css'));
 
     // static: screenshots
     if (pathname.startsWith('/screenshots/')) {
@@ -893,7 +972,7 @@ const server = http.createServer(async (req, res) => {
           logo:    body.logo    || '',
           credits: body.credits || '',
         });
-        await page.goto(`http://localhost:${PORT}/promo.html?${q.toString()}`, { waitUntil: 'networkidle' });
+        await page.goto(`http://localhost:${ACTIVE_PORT}/promo.html?${q.toString()}`, { waitUntil: 'networkidle' });
         await page.waitForFunction('window.__promoReady === true', null, { timeout: 15000 });
         await page.screenshot({ path: outPath, type: 'png' });
         await browser.close();
@@ -942,7 +1021,7 @@ const server = http.createServer(async (req, res) => {
         const browser = await chromium.launch();
         const ctx = await browser.newContext();
         const page = await ctx.newPage();
-        await page.goto(`http://localhost:${PORT}/screenshots/${encodeURIComponent(app)}/gallery.html?print=1`, { waitUntil: 'networkidle' });
+        await page.goto(`http://localhost:${ACTIVE_PORT}/screenshots/${encodeURIComponent(app)}/gallery.html?print=1`, { waitUntil: 'networkidle' });
         await page.pdf({ path: outPath, format: 'Letter', printBackground: true, landscape: true, margin: { top: '0.3in', bottom: '0.3in', left: '0.3in', right: '0.3in' } });
         await browser.close();
         return json(res, 200, { ok: true, file: `${app}/${outFile}` });
@@ -956,78 +1035,96 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/export/video' && req.method === 'POST') {
       const body = await readBody(req);
       const fmt = VIDEO_FORMATS[body.format] || VIDEO_FORMATS.reel;
-      const app = String(body.app || '').replace(/[^\w.-]/g, '');
-      if (!app) return json(res, 400, { error: 'app required' });
-      const dir = path.join(SHOTS, app);
-      if (!fs.existsSync(dir)) return json(res, 404, { error: 'app folder not found' });
-      const files = fs.readdirSync(dir).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort();
-      if (!files.length) return json(res, 400, { error: 'no screenshots to export' });
+      // Two selection modes:
+      //   shots: ["app/file.png", ...] — pick a specific ordered list of
+      //                                  screenshots (may span multiple apps).
+      //   app:   "folder"              — every png/jpg under screenshots/<app>/.
+      // At least one is required.
+      let shotPaths = [];
+      let outApp = '';
+      if (Array.isArray(body.shots) && body.shots.length) {
+        shotPaths = body.shots
+          .map((s) => String(s))
+          .filter((s) => safeJoin(SHOTS, s) && fs.existsSync(safeJoin(SHOTS, s)));
+        if (!shotPaths.length) return json(res, 400, { error: 'no valid shots in selection' });
+        outApp = shotPaths[0].split(/[\\/]/)[0] || 'manual';
+      } else {
+        const app = String(body.app || '').replace(/[^\w.-]/g, '');
+        if (!app) return json(res, 400, { error: 'shots[] or app required' });
+        const dir = path.join(SHOTS, app);
+        if (!fs.existsSync(dir)) return json(res, 404, { error: 'app folder not found' });
+        const files = fs.readdirSync(dir).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort();
+        if (!files.length) return json(res, 400, { error: 'no screenshots to export' });
+        shotPaths = files.map((f) => `${app}/${f}`);
+        outApp = app;
+      }
       const frameMs = Number(body.frameMs || 2500);
       const fps = Number(body.fps || 30);
       const cfg = {
         fps,
         watermark: body.watermark || '',
-        frames: files.map((f) => {
+        style:     body.style     || 'minimal',
+        bgMusic:   body.bgMusic   || '',
+        frames: shotPaths.map((rel) => {
+          const abs = safeJoin(SHOTS, rel);
           let meta = {};
-          const sidecar = path.join(dir, f.replace(/\.[^.]+$/, '.json'));
+          const sidecar = abs.replace(/\.[^.]+$/, '.json');
           if (fs.existsSync(sidecar)) { try { meta = JSON.parse(fs.readFileSync(sidecar, 'utf8')); } catch {} }
           return {
-            img: `/screenshots/${app}/${encodeURIComponent(f)}`,
+            img: '/screenshots/' + rel.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/'),
             caption: meta.caption || '',
             note:    meta.note    || '',
             durationMs: frameMs,
           };
         }),
       };
-      const outDir = path.join(dir, EXPORTS_SUBDIR);
+      const outDir = path.join(SHOTS, outApp, EXPORTS_SUBDIR);
       fs.mkdirSync(outDir, { recursive: true });
       const webmOut = path.join(outDir, `video-${body.format}.webm`);
       try {
         const { chromium } = require('playwright');
-        const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
-        const ctx = await browser.newContext({ viewport: { width: fmt.w, height: fmt.h }, deviceScaleFactor: 1 });
-        const page = await ctx.newPage();
         const q = encodeURIComponent(JSON.stringify(cfg));
-        await page.goto(`http://localhost:${PORT}/slideshow.html?config=${q}`, { waitUntil: 'networkidle' });
-        await page.waitForFunction('window.__slideshowReady === true', null, { timeout: 30000 });
-        const duration = await page.evaluate('window.__slideshowDurationMs');
-        // Start MediaRecorder inside the page (captures the visible viewport
-        // via captureStream on a canvas that mirrors the body). For the full
-        // page body, we use document.documentElement rendered onto a canvas
-        // each frame — simpler: use the MediaRecorder on a <canvas> tied via
-        // requestAnimationFrame to snapshot html2canvas-style? Too heavy.
-        // Instead: capture the page via CDP video recording? Playwright
-        // has page.video() but needs recordVideo at context-create. Easiest
-        // path: use ctx with recordVideo and let the slideshow play.
-        await browser.close();
-        // Re-launch with recordVideo so we get a webm out-of-the-box.
-        const rbrowser = await chromium.launch();
-        const rctx = await rbrowser.newContext({
+        const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+        const ctx = await browser.newContext({
           viewport: { width: fmt.w, height: fmt.h },
-          deviceScaleFactor: 1,
+          // 2× DPR so text + UI chrome render crisp; video file stays at the
+          // target w×h because recordVideo.size is fixed below, but the
+          // rasterization is from a 2× surface — much sharper images.
+          deviceScaleFactor: 2,
           recordVideo: { dir: outDir, size: { width: fmt.w, height: fmt.h } },
         });
-        const rpage = await rctx.newPage();
-        await rpage.goto(`http://localhost:${PORT}/slideshow.html?config=${q}`, { waitUntil: 'networkidle' });
-        await rpage.waitForFunction('window.__slideshowReady === true', null, { timeout: 30000 });
-        await rpage.evaluate('window.__slideshowStart = true');
-        await rpage.waitForFunction('window.__slideshowDone === true', null, { timeout: duration + 10000 });
-        const video = rpage.video();
-        await rpage.close();
+        const page = await ctx.newPage();
+        // domcontentloaded + explicit readiness signal — 'networkidle' can
+        // hang because Playwright keeps HTTP/1.1 connections alive.
+        await page.goto(`http://localhost:${ACTIVE_PORT}/slideshow.html?config=${q}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction('window.__slideshowReady === true', null, { timeout: 60000 });
+        const duration = await page.evaluate('window.__slideshowDurationMs');
+        await page.evaluate('window.__slideshowStart = true');
+        await page.waitForFunction('window.__slideshowDone === true', null, { timeout: duration + 10000 });
+        const video = page.video();
+        await page.close();
         const tempPath = await video.path();
-        await rctx.close();
-        await rbrowser.close();
+        await ctx.close();
+        await browser.close();
         fs.renameSync(tempPath, webmOut);
         // Try mp4 transcode if ffmpeg is on PATH.
-        let finalFile = `${app}/${EXPORTS_SUBDIR}/video-${body.format}.webm`;
+        let finalFile = `${outApp}/${EXPORTS_SUBDIR}/video-${body.format}.webm`;
         try {
           const mp4Out = webmOut.replace(/\.webm$/, '.mp4');
           await new Promise((resolve, reject) => {
-            const ff = spawn('ffmpeg', ['-y', '-i', webmOut, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4Out], { stdio: 'ignore' });
+            // -crf 18 = visually-lossless H.264, preset slow for better
+            // compression at the same quality. Adds ~30% encode time but the
+            // resulting MP4 is noticeably sharper than the default -crf 23.
+            const ff = spawn('ffmpeg', [
+              '-y', '-i', webmOut,
+              '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
+              '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+              mp4Out,
+            ], { stdio: 'ignore' });
             ff.on('error', reject);
             ff.on('exit', (code) => code === 0 ? resolve() : reject(new Error('ffmpeg exit ' + code)));
           });
-          finalFile = `${app}/${EXPORTS_SUBDIR}/video-${body.format}.mp4`;
+          finalFile = `${outApp}/${EXPORTS_SUBDIR}/video-${body.format}.mp4`;
         } catch { /* ffmpeg missing — keep webm */ }
         return json(res, 200, { ok: true, file: finalFile, w: fmt.w, h: fmt.h, frames: cfg.frames.length });
       } catch (e) { return json(res, 500, { error: 'Video export failed: ' + e.message }); }
@@ -1060,7 +1157,9 @@ function listenWithFallback(startPort, attempt = 0) {
   // The injected widget retries multiple host aliases client-side, so
   // dual-stack is good enough.
   server.listen(p, () => {
+    ACTIVE_PORT = p;
     console.log(`route-shot dashboard  →  http://localhost:${p}`);
   });
 }
+let ACTIVE_PORT = PORT;   // updated by listenWithFallback once bound
 listenWithFallback(PORT);

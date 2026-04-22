@@ -98,7 +98,28 @@ cmd_check() {
     check_one "Crawler script"    test -f "$CRAWLER"
     check_one "package.json"      test -f "$SCRIPT_DIR/package.json"
     check_one "Playwright module" test -d "$SCRIPT_DIR/node_modules/playwright"
-    check_one "Chromium browser"  bash -c '[ -d "$HOME/.cache/ms-playwright" ] || [ -d "$HOME/Library/Caches/ms-playwright" ]'
+    # Playwright installs Chromium to a platform-specific cache dir:
+    #   Linux   : $HOME/.cache/ms-playwright
+    #   macOS   : $HOME/Library/Caches/ms-playwright
+    #   Windows : $LOCALAPPDATA/ms-playwright  (also $USERPROFILE/AppData/Local/ms-playwright)
+    check_one "Chromium browser"  bash -c '
+      [ -d "$HOME/.cache/ms-playwright" ] ||
+      [ -d "$HOME/Library/Caches/ms-playwright" ] ||
+      [ -n "$LOCALAPPDATA" ] && [ -d "$LOCALAPPDATA/ms-playwright" ] ||
+      [ -n "$USERPROFILE" ] && [ -d "$USERPROFILE/AppData/Local/ms-playwright" ]
+    '
+    # ffmpeg is OPTIONAL — only used to transcode the exported slideshow
+    # WebM to MP4 for Reels / TikTok / FB. Without it the dashboard still
+    # ships WebM, which works on YouTube/Twitter but not on Instagram etc.
+    if command -v ffmpeg >/dev/null 2>&1; then
+        printf "  ${G}✓${NC} ffmpeg (video → mp4 transcode)\n"
+        printf "      %s\n" "$(ffmpeg -version 2>/dev/null | head -1 | cut -d' ' -f1-3)"
+    else
+        printf "  ${Y}○${NC} ffmpeg ${Y}(optional — mp4 export falls back to .webm)${NC}\n"
+        printf "      Install: ${B}winget install Gyan.FFmpeg${NC}  or  ${B}choco install ffmpeg${NC}  (Windows)\n"
+        printf "               ${B}brew install ffmpeg${NC}  (macOS)\n"
+        printf "               ${B}sudo apt install ffmpeg${NC}  (Debian/Ubuntu)\n"
+    fi
     printf "\n"
 }
 

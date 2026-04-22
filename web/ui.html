@@ -391,7 +391,7 @@
 
       <h3 style="margin: 14px 0 4px; font-size: 14px;">Slideshow video (Reel / Feed / YouTube)</h3>
       <div class="row">
-        <select id="videoApp" style="flex: 1;"><option value="">(pick an app folder)</option></select>
+        <select id="videoApp" style="flex: 1;"><option value="">(all screenshots in app folder)</option></select>
         <select id="videoFormat">
           <option value="reel">Reel / Story 1080×1920</option>
           <option value="square">Square 1080×1080</option>
@@ -399,8 +399,59 @@
           <option value="youtube">YouTube 1920×1080</option>
         </select>
         <input type="number" id="videoFrameMs" value="2500" min="500" max="10000" step="100" style="width: 90px;" title="ms per frame">
+        <select id="videoStyle" title="visual style (32 effects)">
+          <optgroup label="Clean">
+            <option value="minimal">minimal — fade + Ken-Burns</option>
+            <option value="dynamic">dynamic — slides + zoom mix</option>
+            <option value="3d">3D — cube flip + rotate</option>
+            <option value="cinematic">cinematic — 2.35:1 bars, serif</option>
+            <option value="documentary">documentary — lower-third banner</option>
+            <option value="museum">museum — clean white gallery</option>
+            <option value="magazine">magazine — editorial serif + red rule</option>
+            <option value="paper">paper — layered card shadows</option>
+          </optgroup>
+          <optgroup label="Tech / Dev">
+            <option value="hacker">hacker — matrix rain, green terminal, glitch</option>
+            <option value="maker">maker — PCB grid, amber accent</option>
+            <option value="anonymous">anonymous — CRT scanlines + RGB split</option>
+            <option value="terminal">terminal — amber tty prompt</option>
+            <option value="cyberpunk">cyberpunk — magenta/cyan neon</option>
+            <option value="oscilloscope">oscilloscope — CRT grid + sine sweep</option>
+            <option value="blueprint">blueprint — white lines on navy</option>
+            <option value="neon-outline">neon-outline — thin glowing wire</option>
+          </optgroup>
+          <optgroup label="Space / Science">
+            <option value="nasa">nasa — mission control HUD</option>
+            <option value="cosmos">cosmos — starfield + drift</option>
+            <option value="starfield">starfield — warp speed</option>
+            <option value="nebula">nebula — purple gas clouds</option>
+            <option value="wormhole">wormhole — radial zoom streaks</option>
+            <option value="satellite">satellite — telemetry HUD overlay</option>
+            <option value="particle">particle — floating lab dots</option>
+            <option value="lab-notebook">lab-notebook — engineering grid</option>
+            <option value="radar">radar — rotating green sweep</option>
+          </optgroup>
+          <optgroup label="Retro / Art">
+            <option value="retro-80s">retro-80s — VHS neon</option>
+            <option value="vhs">vhs — magnetic tape artifacts</option>
+            <option value="film-noir">film-noir — B&W, grain, vignette</option>
+            <option value="polaroid">polaroid — white card, handwritten</option>
+            <option value="chalkboard">chalkboard — green board, chalk</option>
+            <option value="comic">comic — halftone, POW! feel</option>
+            <option value="holographic">holographic — iridescent shimmer</option>
+          </optgroup>
+        </select>
         <input type="text" id="videoWatermark" placeholder="watermark (optional)" style="flex: 1;">
         <button id="videoGoBtn" class="primary">Render video</button>
+      </div>
+      <div class="row" style="align-items: flex-start;">
+        <label class="muted" style="font-size: 12px; padding-top: 6px; min-width: 92px;">Pick shots<br><span style="opacity:0.7;">(Ctrl/Shift)</span></label>
+        <select id="videoShots" multiple size="6" style="flex: 1; font-size: 12px; font-family: monospace;"></select>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <button id="videoShotsAll" type="button" style="font-size: 11px;">Select all</button>
+          <button id="videoShotsNone" type="button" style="font-size: 11px;">Clear</button>
+          <span class="muted" style="font-size: 11px;" id="videoShotsHint">or leave empty → use app folder</span>
+        </div>
       </div>
       <div id="videoStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
     </div>
@@ -835,8 +886,10 @@ function populateExportPickers() {
   const shotSel = $('promoShot');
   const appSelE = $('exportApp');
   const appSelV = $('videoApp');
+  const shotsMulti = $('videoShots');
   if (!shotSel || !appSelE || !appSelV) return;
   const prevShot = shotSel.value, prevAppE = appSelE.value, prevAppV = appSelV.value;
+  const prevSel = new Set(shotsMulti ? [...shotsMulti.selectedOptions].map((o) => o.value) : []);
   shotSel.innerHTML = '<option value="">(pick a screenshot)</option>';
   galleryFiles.forEach((f) => {
     const o = document.createElement('option'); o.value = f; o.textContent = f;
@@ -847,14 +900,30 @@ function populateExportPickers() {
   const apps = [...new Set(galleryFiles.map((f) => f.split('/')[0]))].sort();
   [appSelE, appSelV].forEach((sel, i) => {
     const prev = i === 0 ? prevAppE : prevAppV;
-    sel.innerHTML = '<option value="">(pick an app folder)</option>';
+    const blank = i === 0 ? '(pick an app folder)' : '(all screenshots in app folder)';
+    sel.innerHTML = '<option value="">' + blank + '</option>';
     apps.forEach((a) => {
       const o = document.createElement('option'); o.value = a; o.textContent = a;
       sel.appendChild(o);
     });
     if (apps.includes(prev)) sel.value = prev;
   });
+  if (shotsMulti) {
+    shotsMulti.innerHTML = '';
+    galleryFiles.forEach((f) => {
+      const o = document.createElement('option'); o.value = f; o.textContent = f;
+      if (prevSel.has(f)) o.selected = true;
+      shotsMulti.appendChild(o);
+    });
+  }
 }
+
+$('videoShotsAll')?.addEventListener('click', () => {
+  [...$('videoShots').options].forEach((o) => o.selected = true);
+});
+$('videoShotsNone')?.addEventListener('click', () => {
+  [...$('videoShots').options].forEach((o) => o.selected = false);
+});
 
 async function postJson(url, body) {
   const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -913,15 +982,20 @@ $('pdfGoBtn')?.addEventListener('click', async () => {
 
 $('videoGoBtn')?.addEventListener('click', async () => {
   const app = $('videoApp').value;
-  if (!app) { alert('Pick an app folder first.'); return; }
+  const shots = [...$('videoShots').selectedOptions].map((o) => o.value);
+  if (!shots.length && !app) { alert('Pick some screenshots or an app folder.'); return; }
   const btn = $('videoGoBtn'); btn.disabled = true;
-  $('videoStatus').textContent = 'Recording video — this may take a minute…';
+  $('videoStatus').textContent = shots.length
+    ? `Recording video from ${shots.length} screenshot(s)…`
+    : 'Recording video from app folder…';
   try {
     const r = await postJson('/api/export/video', {
       app,
+      shots: shots.length ? shots : undefined,
       format:    $('videoFormat').value,
       frameMs:   Number($('videoFrameMs').value) || 2500,
       watermark: $('videoWatermark').value,
+      style:     $('videoStyle').value,
     });
     const isMp4 = /\.mp4$/i.test(r.file);
     $('videoStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ', ' + r.frames + ' frames' + (isMp4 ? '' : ' — install ffmpeg for mp4') + ')';

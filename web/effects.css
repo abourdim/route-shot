@@ -1,0 +1,475 @@
+/* route-shot effects.css — 30+ visual styles for slideshows and gallery demo.
+   Linked by slideshow.html, inlined by the server into generated gallery.html
+   so the exported gallery stays fully self-contained.
+   Usage: apply a body class `.style-<name>`.                                   */
+
+/* ===== shared base =============================================== */
+body[class*="style-"] { color:#fff; }
+
+/* Base transitions — applied via .t-* classes on the slide element.
+   Each pair has *_in and *_out variants.                              */
+@keyframes rs_fadeIn   { from { opacity:0 } to { opacity:1 } }
+@keyframes rs_fadeOut  { from { opacity:1 } to { opacity:0 } }
+.t-fade-in  { animation: rs_fadeIn  var(--tin)  ease forwards; }
+.t-fade-out { animation: rs_fadeOut var(--tout) ease forwards; }
+
+@keyframes rs_slideL_in  { from { opacity:0; transform:translate3d( 40%,0,0) } to { opacity:1; transform:none } }
+@keyframes rs_slideL_out { from { opacity:1; transform:none } to { opacity:0; transform:translate3d(-40%,0,0) } }
+.t-slideL-in  { animation: rs_slideL_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+.t-slideL-out { animation: rs_slideL_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+
+@keyframes rs_slideR_in  { from { opacity:0; transform:translate3d(-40%,0,0) } to { opacity:1; transform:none } }
+@keyframes rs_slideR_out { from { opacity:1; transform:none } to { opacity:0; transform:translate3d( 40%,0,0) } }
+.t-slideR-in  { animation: rs_slideR_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+.t-slideR-out { animation: rs_slideR_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+
+@keyframes rs_slideU_in  { from { opacity:0; transform:translate3d(0, 40%,0) } to { opacity:1; transform:none } }
+@keyframes rs_slideU_out { from { opacity:1; transform:none } to { opacity:0; transform:translate3d(0,-40%,0) } }
+.t-slideU-in  { animation: rs_slideU_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+.t-slideU-out { animation: rs_slideU_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+
+@keyframes rs_zoom_in  { from { opacity:0; transform:scale(0.55) } to { opacity:1; transform:scale(1) } }
+@keyframes rs_zoom_out { from { opacity:1; transform:scale(1) }   to { opacity:0; transform:scale(1.3) } }
+.t-zoom-in  { animation: rs_zoom_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+.t-zoom-out { animation: rs_zoom_out var(--tout) cubic-bezier(.5,0,.75,0) forwards; }
+
+@keyframes rs_cubeY_in  { from { opacity:0; transform:rotateY(-90deg) translateZ(50vw) } to { opacity:1; transform:none } }
+@keyframes rs_cubeY_out { from { opacity:1; transform:none } to { opacity:0; transform:rotateY( 90deg) translateZ(50vw) } }
+.t-cubeY-in  { animation: rs_cubeY_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+.t-cubeY-out { animation: rs_cubeY_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+
+@keyframes rs_cubeX_in  { from { opacity:0; transform:rotateX( 90deg) translateZ(50vh) } to { opacity:1; transform:none } }
+@keyframes rs_cubeX_out { from { opacity:1; transform:none } to { opacity:0; transform:rotateX(-90deg) translateZ(50vh) } }
+.t-cubeX-in  { animation: rs_cubeX_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+.t-cubeX-out { animation: rs_cubeX_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+
+@keyframes rs_flip_in  { from { opacity:0; transform:rotateY(-180deg) } to { opacity:1; transform:none } }
+@keyframes rs_flip_out { from { opacity:1; transform:none } to { opacity:0; transform:rotateY( 180deg) } }
+.t-flip-in  { animation: rs_flip_in  var(--tin)  ease forwards; }
+.t-flip-out { animation: rs_flip_out var(--tout) ease forwards; }
+
+@keyframes rs_glitch_in  {
+  0%   { opacity:0; transform:translateX(-8px) skewX(-3deg); filter:drop-shadow(-4px 0 0 #ff003c) drop-shadow(4px 0 0 #00e1ff); }
+  40%  { opacity:1; transform:translateX( 8px) skewX( 3deg); filter:drop-shadow( 4px 0 0 #ff003c) drop-shadow(-4px 0 0 #00e1ff); }
+  80%  { opacity:1; transform:translateX(-2px); filter:drop-shadow(1px 0 0 #ff003c) drop-shadow(-1px 0 0 #00e1ff); }
+  100% { opacity:1; transform:none; filter:none; }
+}
+@keyframes rs_glitch_out {
+  0% { opacity:1; transform:none; }
+  50% { opacity:1; transform:translateX(6px) skewX(4deg); filter:drop-shadow(4px 0 0 #ff003c) drop-shadow(-4px 0 0 #00e1ff); }
+  100% { opacity:0; transform:translateX(-20px); }
+}
+.t-glitch-in  { animation: rs_glitch_in  var(--tin)  steps(6) forwards; }
+.t-glitch-out { animation: rs_glitch_out var(--tout) steps(6) forwards; }
+
+@keyframes rs_pop_in  { from { opacity:0; transform:scale(0.2) rotate(-6deg) } to { opacity:1; transform:scale(1) rotate(0) } }
+@keyframes rs_pop_out { from { opacity:1; transform:scale(1) rotate(0) } to { opacity:0; transform:scale(1.6) rotate(6deg) } }
+.t-pop-in  { animation: rs_pop_in  var(--tin)  cubic-bezier(.175,.885,.32,1.275) forwards; }
+.t-pop-out { animation: rs_pop_out var(--tout) cubic-bezier(.5,0,.75,0) forwards; }
+
+@keyframes rs_iris_in  { from { opacity:0; clip-path:circle(0% at 50% 50%); } to { opacity:1; clip-path:circle(140% at 50% 50%); } }
+@keyframes rs_iris_out { from { opacity:1; clip-path:circle(140% at 50% 50%); } to { opacity:0; clip-path:circle(0% at 50% 50%); } }
+.t-iris-in  { animation: rs_iris_in  var(--tin)  ease forwards; }
+.t-iris-out { animation: rs_iris_out var(--tout) ease forwards; }
+
+@keyframes rs_blinds_in  { from { opacity:0; clip-path: inset(0 100% 0 0); } to { opacity:1; clip-path: inset(0 0 0 0); } }
+@keyframes rs_blinds_out { from { opacity:1; clip-path: inset(0 0 0 0); } to { opacity:0; clip-path: inset(0 0 0 100%); } }
+.t-blinds-in  { animation: rs_blinds_in  var(--tin)  cubic-bezier(.22,1,.36,1) forwards; }
+.t-blinds-out { animation: rs_blinds_out var(--tout) cubic-bezier(.64,0,.78,0) forwards; }
+
+/* Ken-Burns (drifting zoom on the image) */
+@keyframes rs_kb { from { transform:scale(1) translate3d(0,0,0); } to { transform:scale(1.08) translate3d(-2%,-1%,0); } }
+.slide.kb img { animation: rs_kb linear forwards; }
+
+/* Shared caption defaults; styles override colors and fonts */
+.lower { font-family: system-ui, -apple-system, sans-serif; font-weight:800; letter-spacing:-0.01em; line-height:1.15; color:#fff; }
+
+/* ================================================================= */
+/* ====     T H E M E S   ( 3 0 + )                              ==== */
+/* ================================================================= */
+
+/* 1. minimal — neutral dark, fade only */
+body.style-minimal { background:#0d1117; }
+
+/* 2. dynamic — soft gradient, mixed motion */
+body.style-dynamic { background:linear-gradient(135deg,#0d1117 0%,#1a1f2e 50%,#0d1117 100%); }
+
+/* 3. 3d — perspective canvas */
+body.style-3d { background:linear-gradient(135deg,#0d1117 0%,#1a1f2e 50%,#0d1117 100%); }
+
+/* 4. cinematic — 2.35:1 bars, slow pan, serif title */
+body.style-cinematic { background:#000; font-family:"Playfair Display","Georgia",serif; }
+body.style-cinematic::before,
+body.style-cinematic::after { content:""; position:fixed; left:0; right:0; height:11vh; background:#000; z-index:5; pointer-events:none; }
+body.style-cinematic::before { top:0; }
+body.style-cinematic::after  { bottom:0; }
+body.style-cinematic .lower { font-family:inherit; font-weight:700; letter-spacing:0.04em; }
+
+/* 5. documentary — lower-third banner, sans */
+body.style-documentary { background:#111; font-family:"Helvetica Neue","Inter",sans-serif; }
+body.style-documentary .lower {
+  background: linear-gradient(90deg, rgba(220,30,30,0.95) 0, rgba(220,30,30,0.95) 40%, transparent 60%);
+  padding:18px 28px; text-align:left; color:#fff; font-weight:900; letter-spacing:0.04em;
+}
+
+/* 6. hacker — matrix rain + green terminal */
+body.style-hacker { background:#000; color:#00ff9c; font-family:"SF Mono","Cascadia Code",Consolas,monospace; }
+body.style-hacker::before {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:1;
+  background: repeating-linear-gradient(0deg, rgba(0,255,156,0.06) 0 1px, transparent 1px 3px);
+}
+body.style-hacker::after {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:2;
+  background: repeating-linear-gradient(0deg, rgba(0,255,156,0.12) 0 2px, transparent 2px 20px);
+  background-size:100% 220px; animation: rs_matrix 3s linear infinite; opacity:0.35; mix-blend-mode: screen;
+}
+@keyframes rs_matrix { from { background-position:0 0 } to { background-position:0 220px } }
+body.style-hacker .lower { color:#00ff9c; font-family:inherit; text-shadow:0 0 8px rgba(0,255,156,0.7); }
+body.style-hacker .lower::before { content:"> "; }
+body.style-hacker .lower::after { content:"_"; animation: rs_blink 1s step-end infinite; margin-left:4px; }
+@keyframes rs_blink { 50% { opacity:0 } }
+body.style-hacker .slide img { border:1px solid rgba(0,255,156,0.4); box-shadow:0 0 48px rgba(0,255,156,0.3); }
+
+/* 7. maker — PCB grid, amber accent */
+body.style-maker { background:#0a1f0a; color:#ffb347; font-family:"SF Mono",Consolas,monospace; }
+body.style-maker::before {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:1;
+  background-image: linear-gradient(rgba(255,179,71,0.09) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,179,71,0.09) 1px, transparent 1px);
+  background-size:40px 40px;
+}
+body.style-maker::after {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:2;
+  background: radial-gradient(circle at 20% 30%, rgba(255,179,71,0.15) 0, transparent 8%),
+              radial-gradient(circle at 80% 70%, rgba(255,179,71,0.15) 0, transparent 8%),
+              radial-gradient(circle at 50% 90%, rgba(255,179,71,0.15) 0, transparent 8%);
+  animation: rs_pcb 3.5s ease-in-out infinite;
+}
+@keyframes rs_pcb { 0%,100% { opacity:0.5 } 50% { opacity:1 } }
+body.style-maker .lower { color:#ffb347; font-family:inherit; text-shadow:0 0 8px rgba(255,179,71,0.6); }
+body.style-maker .lower::before { content:"▸ "; }
+body.style-maker .slide img { border:1px solid rgba(255,179,71,0.35); box-shadow:0 0 48px rgba(255,179,71,0.22); }
+
+/* 8. anonymous — monochrome CRT scanlines + RGB split */
+body.style-anonymous { background:#05050a; font-family:"Fira Sans","Helvetica Neue",sans-serif; }
+body.style-anonymous::before {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:1;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 3px);
+}
+body.style-anonymous::after {
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:2;
+  background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.6) 100%);
+  animation: rs_crt 6s linear infinite;
+}
+@keyframes rs_crt { from { background-position:0 0 } to { background-position:0 -100vh } }
+body.style-anonymous .lower { font-weight:900; letter-spacing:0.08em; text-transform:uppercase;
+  animation: rs_rgb 4s infinite; }
+@keyframes rs_rgb {
+  0%,94%,100% { text-shadow:0 3px 10px rgba(0,0,0,0.85); }
+  95% { text-shadow:-2px 0 #00e1ff, 2px 0 #ff003c; }
+  96% { text-shadow: 3px 0 #00e1ff, -3px 0 #ff003c; }
+}
+body.style-anonymous .slide img { filter:grayscale(0.35) contrast(1.08); }
+
+/* 9. terminal — pure tty, amber on black */
+body.style-terminal { background:#1a0f00; color:#ffb000; font-family:"Cascadia Code","SF Mono",Consolas,monospace; }
+body.style-terminal::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background: repeating-linear-gradient(0deg, rgba(255,176,0,0.04) 0 1px, transparent 1px 2px);
+}
+body.style-terminal .lower { color:#ffb000; font-family:inherit; font-weight:700; }
+body.style-terminal .lower::before { content:"[route-shot@term]$ "; opacity:0.7; font-weight:400; }
+body.style-terminal .slide img { border:1px solid rgba(255,176,0,0.4); box-shadow:0 0 40px rgba(255,176,0,0.25); filter:contrast(1.05); }
+
+/* 10. cyberpunk — magenta + cyan neon */
+body.style-cyberpunk { background:#0a0018; font-family:"Orbitron","Michroma",sans-serif; }
+body.style-cyberpunk::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background:
+    radial-gradient(circle at 20% 10%, #ff00aa 0%, transparent 40%),
+    radial-gradient(circle at 80% 90%, #00ffff 0%, transparent 40%);
+  filter: blur(40px); opacity:0.5;
+}
+body.style-cyberpunk .lower { color:#fff; text-shadow: 0 0 10px #ff00aa, 0 0 20px #00ffff; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+body.style-cyberpunk .slide img { border:2px solid #ff00aa; box-shadow: 0 0 24px #ff00aa, 0 0 48px #00ffff; }
+
+/* 11. oscilloscope — dark CRT, green sine sweep */
+body.style-oscilloscope { background:#001a10; color:#40ff80; font-family:"SF Mono",monospace; }
+body.style-oscilloscope::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(64,255,128,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(64,255,128,0.1) 1px, transparent 1px);
+  background-size:40px 40px;
+}
+body.style-oscilloscope::after {
+  content:""; position:fixed; left:0; right:0; top:50%; height:2px;
+  background: linear-gradient(90deg, transparent, #40ff80, transparent);
+  box-shadow: 0 0 12px #40ff80;
+  animation: rs_scope 2.5s linear infinite;
+}
+@keyframes rs_scope { 0% { transform: translateY(-30vh) } 50% { transform: translateY(30vh) } 100% { transform: translateY(-30vh) } }
+body.style-oscilloscope .lower { color:#40ff80; font-family:inherit; text-shadow:0 0 8px #40ff80; }
+
+/* 12. blueprint — white lines on navy */
+body.style-blueprint { background:#0a2240; color:#e0f0ff; font-family:"Inter","Segoe UI",sans-serif; }
+body.style-blueprint::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.14) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+}
+body.style-blueprint .lower { color:#fff; font-weight:700; font-family:inherit; letter-spacing:0.06em; text-transform:uppercase; }
+body.style-blueprint .slide img { mix-blend-mode:screen; filter:invert(1) hue-rotate(180deg); }
+
+/* 13. nasa — mission control black + orange/cyan */
+body.style-nasa { background:#000; color:#fff; font-family:"Inter","Source Sans Pro",sans-serif; }
+body.style-nasa::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size:50px 50px;
+}
+body.style-nasa::after {
+  content: "NASA • MISSION OPS"; position:fixed; top:16px; left:50%; transform:translateX(-50%);
+  color:#00e1ff; font-size:12px; letter-spacing:0.4em; font-weight:700; font-family:inherit;
+  padding:4px 12px; border:1px solid #00e1ff; border-radius:2px;
+}
+body.style-nasa .lower { color:#ff9500; font-weight:900; text-transform:uppercase; letter-spacing:0.1em; text-shadow:0 0 12px rgba(255,149,0,0.6); }
+body.style-nasa .lower::before { content:"TRANSMISSION "; color:#fff; opacity:0.6; }
+body.style-nasa .slide img { border:2px solid rgba(255,149,0,0.5); }
+
+/* 14. cosmos — deep space, starfield, drifting */
+body.style-cosmos { background: radial-gradient(ellipse at 30% 30%, #1a0033 0%, #000 60%); font-family:"Inter",sans-serif; }
+body.style-cosmos::before {
+  content:""; position:fixed; inset:-20%; pointer-events:none;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, #fff, transparent),
+    radial-gradient(1px 1px at 30% 70%, #fff, transparent),
+    radial-gradient(2px 2px at 50% 40%, #fff, transparent),
+    radial-gradient(1px 1px at 70% 80%, #fff, transparent),
+    radial-gradient(1px 1px at 85% 15%, #fff, transparent),
+    radial-gradient(1px 1px at 90% 60%, #fff, transparent),
+    radial-gradient(2px 2px at 15% 85%, #fff, transparent),
+    radial-gradient(1px 1px at 45% 10%, #fff, transparent);
+  background-size: 200px 200px;
+  animation: rs_drift 60s linear infinite;
+}
+@keyframes rs_drift { to { transform: translate(-5%, -8%) } }
+body.style-cosmos .lower { color:#e0ccff; font-weight:700; text-shadow:0 0 16px rgba(160,120,255,0.6); }
+
+/* 15. starfield — warp speed radial */
+body.style-starfield { background:#000; font-family:"Inter",sans-serif; }
+body.style-starfield::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:
+    radial-gradient(2px 2px at 50% 50%, #fff, transparent),
+    radial-gradient(1px 1px at 20% 80%, #fff, transparent),
+    radial-gradient(1px 1px at 80% 20%, #fff, transparent);
+  animation: rs_warp 1.8s linear infinite;
+}
+@keyframes rs_warp {
+  from { transform: scale(1); opacity:0.6; filter:blur(0); }
+  to   { transform: scale(3.5); opacity:0; filter:blur(2px); }
+}
+body.style-starfield .lower { color:#fff; text-shadow:0 0 12px rgba(255,255,255,0.8); }
+
+/* 16. nebula — deep purples + gas clouds */
+body.style-nebula { background:
+  radial-gradient(ellipse at 20% 30%, #4b0082 0, transparent 50%),
+  radial-gradient(ellipse at 80% 70%, #8b0082 0, transparent 50%),
+  radial-gradient(ellipse at 50% 50%, #002060 0, transparent 80%), #000;
+  animation: rs_nebula 12s ease-in-out infinite alternate;
+  font-family:"Inter",sans-serif;
+}
+@keyframes rs_nebula { from { filter:hue-rotate(0) saturate(1); } to { filter:hue-rotate(40deg) saturate(1.3); } }
+body.style-nebula .lower { color:#e0ccff; font-weight:700; text-shadow:0 0 20px rgba(180,120,255,0.7); }
+body.style-nebula .slide img { box-shadow:0 0 80px rgba(180,120,255,0.45); }
+
+/* 17. wormhole — radial zoom streaks */
+body.style-wormhole { background: radial-gradient(circle at 50% 50%, #00224d 0%, #000 60%); font-family:"Inter",sans-serif; }
+body.style-wormhole::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background: repeating-conic-gradient(from 0deg at 50% 50%,
+    transparent 0deg 3deg,
+    rgba(0,225,255,0.08) 3deg 6deg);
+  animation: rs_tunnel 8s linear infinite;
+}
+@keyframes rs_tunnel { to { transform: rotate(360deg) } }
+body.style-wormhole .lower { color:#00e1ff; font-weight:900; text-shadow:0 0 14px #00e1ff; }
+
+/* 18. satellite — HUD reticle overlay */
+body.style-satellite { background:#0a1420; color:#a0e0ff; font-family:"SF Mono",monospace; }
+body.style-satellite::before {
+  content:""; position:fixed; inset:4vh 4vw; border:1px solid rgba(160,224,255,0.4);
+  pointer-events:none; border-radius:4px;
+  box-shadow: inset 0 0 0 6px rgba(0,0,0,0), inset 20px 20px 0 -18px #a0e0ff, inset -20px 20px 0 -18px #a0e0ff, inset 20px -20px 0 -18px #a0e0ff, inset -20px -20px 0 -18px #a0e0ff;
+}
+body.style-satellite::after {
+  content:"LAT 00°00' • LON 00°00' • ALT 420km • UTC 00:00"; position:fixed; top:5vh; right:5vw;
+  color:#a0e0ff; font-size:11px; letter-spacing:0.2em; font-family:inherit;
+  padding:4px 10px; background:rgba(0,0,0,0.5); border:1px solid rgba(160,224,255,0.4);
+}
+body.style-satellite .lower { color:#a0e0ff; font-family:inherit; }
+
+/* 19. particle — subtle floating dots, science lab calm */
+body.style-particle { background:#0a0d14; font-family:"Inter",sans-serif; }
+body.style-particle::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:
+    radial-gradient(1px 1px at 10% 40%, rgba(100,200,255,0.5), transparent),
+    radial-gradient(2px 2px at 80% 60%, rgba(100,200,255,0.3), transparent),
+    radial-gradient(1px 1px at 45% 80%, rgba(255,200,100,0.4), transparent),
+    radial-gradient(1px 1px at 65% 20%, rgba(255,200,100,0.3), transparent);
+  background-size: 300px 300px, 400px 400px, 250px 250px, 350px 350px;
+  animation: rs_particles 30s linear infinite;
+}
+@keyframes rs_particles { to { background-position: 300px 300px, -400px 400px, 250px -250px, -350px -350px } }
+body.style-particle .lower { color:#e0f0ff; font-weight:300; letter-spacing:0.04em; }
+
+/* 20. lab-notebook — engineering paper grid */
+body.style-lab-notebook { background:#f5f0e8; color:#222; font-family:"Courier New",monospace; }
+body.style-lab-notebook::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(100,120,150,0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100,120,150,0.15) 1px, transparent 1px);
+  background-size:22px 22px;
+}
+body.style-lab-notebook .lower { color:#333; font-family:inherit; font-weight:700; text-shadow:none; background:rgba(255,255,255,0.85); padding:6px 14px; border-left:4px solid #cc0000; }
+body.style-lab-notebook .slide img { box-shadow: 0 6px 20px rgba(0,0,0,0.2); border:6px solid #fff; }
+
+/* 21. retro-80s — VHS neon */
+body.style-retro-80s { background: linear-gradient(180deg, #ff00ff 0%, #00ffff 50%, #ff00ff 100%); font-family:"Press Start 2P","Impact",sans-serif; }
+body.style-retro-80s::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 4px);
+}
+body.style-retro-80s .lower { color:#fff; text-shadow:3px 3px 0 #ff00ff, -3px -3px 0 #00ffff; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
+body.style-retro-80s .slide img { border:4px solid #fff; box-shadow: 6px 6px 0 #ff00ff, -6px -6px 0 #00ffff; }
+
+/* 22. vhs — magnetic tape artifacts */
+body.style-vhs { background:#0a0a0f; font-family:"Courier",monospace; }
+body.style-vhs::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 4px),
+    linear-gradient(0deg, transparent 40%, rgba(255,0,0,0.08) 45%, rgba(0,255,0,0.08) 55%, transparent 60%);
+  background-size: 100% 4px, 100% 20vh;
+  animation: rs_tape 2s linear infinite;
+}
+@keyframes rs_tape { to { background-position: 0 0, 0 -20vh; } }
+body.style-vhs::after {
+  content: "PLAY ▶   SP"; position:fixed; top:24px; left:24px; color:#fff; font-family:inherit; font-size:14px; letter-spacing:0.3em;
+}
+body.style-vhs .lower { color:#fff; font-family:inherit; text-shadow:1px 0 #ff00aa, -1px 0 #00ffff; }
+
+/* 23. film-noir — B&W, heavy grain, vignette */
+body.style-film-noir { background:#000; font-family:"Playfair Display","Georgia",serif; }
+body.style-film-noir::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,0.85) 100%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.6' numOctaves='2' stitchTiles='stitch'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.35'/></svg>");
+}
+body.style-film-noir .slide img { filter: grayscale(1) contrast(1.2); }
+body.style-film-noir .lower { color:#fff; font-weight:700; font-family:inherit; letter-spacing:0.04em; }
+
+/* 24. polaroid — white card with handwritten caption */
+body.style-polaroid { background:#2a2520; font-family:"Kalam","Segoe Print","Comic Sans MS",cursive; }
+body.style-polaroid::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='200' height='200' filter='url(%23n)' opacity='0.06'/></svg>");
+}
+body.style-polaroid .slide { display:flex; align-items:center; justify-content:center; }
+body.style-polaroid .slide img { background:#fff; padding:14px 14px 60px; box-shadow:0 14px 36px rgba(0,0,0,0.55); border-radius:2px; transform:rotate(-1.5deg); }
+body.style-polaroid .lower { color:#222; font-family:inherit; font-weight:700; background:transparent; bottom:10%; }
+
+/* 25. chalkboard — green board + chalk writing */
+body.style-chalkboard { background:#1a3a2a; color:#f0f0e0; font-family:"Patrick Hand","Kalam",cursive; }
+body.style-chalkboard::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/></filter><rect width='200' height='200' filter='url(%23n)' opacity='0.18'/></svg>");
+}
+body.style-chalkboard .lower { color:#fffbe6; font-family:inherit; font-weight:400; text-shadow:none; }
+body.style-chalkboard .slide img { box-shadow:0 10px 30px rgba(0,0,0,0.5); border:6px solid #f5ecd0; }
+
+/* 26. comic — halftone dots, POW! feel */
+body.style-comic { background:#ffde00; font-family:"Bangers","Impact",sans-serif; }
+body.style-comic::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background: radial-gradient(circle, #000 1.5px, transparent 1.5px) 0 0 / 14px 14px;
+  opacity:0.25;
+}
+body.style-comic .lower { color:#000; background:#fff; padding:10px 20px; border:4px solid #000; box-shadow:8px 8px 0 #000;
+  transform:rotate(-2deg); font-family:inherit; font-weight:400; letter-spacing:0.06em; text-transform:uppercase; }
+body.style-comic .slide img { border:4px solid #000; box-shadow: 10px 10px 0 #000; }
+
+/* 27. holographic — iridescent shimmer */
+body.style-holographic { background: conic-gradient(from 0deg at 50% 50%, #ff006e, #ffcc00, #00e0ff, #8338ec, #ff006e);
+  background-size: 300% 300%; animation: rs_holo 12s linear infinite; font-family:"Inter",sans-serif; }
+@keyframes rs_holo { to { background-position: 300% 0 } }
+body.style-holographic::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background: linear-gradient(180deg, rgba(0,0,0,0.5), transparent 30%, transparent 70%, rgba(0,0,0,0.5));
+}
+body.style-holographic .lower { color:#fff; mix-blend-mode:exclusion; font-weight:900; text-shadow:none; }
+
+/* 28. neon-outline — thin glowing wire */
+body.style-neon-outline { background:#0a0015; font-family:"Michroma",sans-serif; }
+body.style-neon-outline::before {
+  content:""; position:fixed; inset:10vh 10vw; border:2px solid #ff00cc;
+  box-shadow: 0 0 20px #ff00cc, inset 0 0 20px #ff00cc; pointer-events:none;
+  animation: rs_neonFlicker 3s infinite;
+}
+@keyframes rs_neonFlicker { 0%,100% { opacity:1 } 7% { opacity:0.5 } 8% { opacity:1 } }
+body.style-neon-outline .lower { color:#ff00cc; text-shadow: 0 0 10px #ff00cc; font-weight:700; }
+
+/* 29. magazine — editorial serif + pull-quote */
+body.style-magazine { background:#fafaf7; color:#111; font-family:"Playfair Display","Georgia",serif; }
+body.style-magazine::before {
+  content:""; position:fixed; top:0; left:0; right:0; height:6px; background:#cc0000; z-index:3;
+}
+body.style-magazine .lower {
+  color:#111; font-family:inherit; font-weight:400; font-style:italic; text-align:left;
+  background:transparent; padding-left:8vw; border-left: 4px solid #cc0000; max-width:70vw;
+}
+body.style-magazine .slide img { box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+
+/* 30. museum — clean white gallery */
+body.style-museum { background:#f4f2ed; color:#222; font-family:"Inter","Source Sans Pro",sans-serif; }
+body.style-museum::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background: radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.12) 0, transparent 60%);
+}
+body.style-museum .lower { color:#222; font-weight:300; letter-spacing:0.08em; text-transform:uppercase; font-size:clamp(14px,1.6vw,22px); }
+body.style-museum .slide img { box-shadow: 0 30px 80px rgba(0,0,0,0.3); background:#fff; padding:12px; }
+
+/* 31. paper — layered paper shadows */
+body.style-paper { background:#efeae0; font-family:"Inter",sans-serif; }
+body.style-paper .slide img {
+  background:#fff; padding:10px; box-shadow:
+    0 4px 12px rgba(0,0,0,0.25),
+    12px 0 0 -4px #dfd9cc, 12px 4px 12px -4px rgba(0,0,0,0.25),
+    24px 0 0 -8px #cec6b6, 24px 4px 12px -8px rgba(0,0,0,0.25);
+}
+body.style-paper .lower { color:#222; font-weight:500; }
+
+/* 32. radar — rotating green sweep */
+body.style-radar { background:#002010; color:#7fff9f; font-family:"SF Mono",monospace; }
+body.style-radar::before {
+  content:""; position:fixed; inset:5vh 5vw; border:2px solid rgba(127,255,159,0.4); border-radius:50%;
+  box-shadow: inset 0 0 0 1px rgba(127,255,159,0.3), inset 0 0 0 200px rgba(127,255,159,0.05);
+}
+body.style-radar::after {
+  content:""; position:fixed; top:50%; left:50%; width:45vh; height:2px;
+  background: linear-gradient(90deg, transparent, #7fff9f);
+  transform-origin: 0 50%; animation: rs_radar 3s linear infinite;
+  box-shadow: 0 0 12px #7fff9f;
+}
+@keyframes rs_radar { to { transform: rotate(360deg) } }
+body.style-radar .lower { color:#7fff9f; font-family:inherit; }
