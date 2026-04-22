@@ -176,6 +176,9 @@ async function captureUrl(page, url, idx, cfg, outDir) {
       try {
         await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
         await dismissAll(page, dismiss, cfg.dismissWait);
+        if (Array.isArray(cfg.preSteps) && cfg.preSteps.length) {
+          await runSteps(page, cfg.preSteps, cfg.navTimeout).catch(() => {});
+        }
       } catch (e) {
         variants.push({ label: item.label, error: `reload failed: ${e.message}` });
         continue;
@@ -222,6 +225,9 @@ async function captureUrl(page, url, idx, cfg, outDir) {
       try {
         await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
         await dismissAll(page, dismiss, cfg.dismissWait);
+        if (Array.isArray(cfg.preSteps) && cfg.preSteps.length) {
+          await runSteps(page, cfg.preSteps, cfg.navTimeout).catch(() => {});
+        }
         for (const lab of pathLabels) {
           const loc = page.getByRole('button', { name: lab, exact: true }).first();
           if (!(await loc.count())) throw new Error(`path step not found: ${lab}`);
@@ -289,11 +295,13 @@ async function crawlApp(browser, app) {
   console.log(`\n=== ${app.name || cfg.url} ===`);
 
   // Run preSteps once (login / onboarding / setup) before crawling.
+  // Order: goto → dismiss (modal out of the way) → preSteps (your clicks).
   // Session cookies and localStorage persist in the context, so subsequent
   // BFS navigations and independent-mode reloads stay authenticated.
   if (Array.isArray(cfg.preSteps) && cfg.preSteps.length) {
     try {
       await page.goto(cfg.url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
+      await dismissAll(page, toList(cfg.dismiss), cfg.dismissWait);
       await runSteps(page, cfg.preSteps, cfg.navTimeout);
       console.log(`  preSteps: ${cfg.preSteps.length} step(s) completed`);
     } catch (e) {
