@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Righteous&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&family=Righteous&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   /* Only non-theme tokens live here; theme colours are set by
      html[data-theme="…"] rules further down (and default to mosque-gold). */
@@ -25,8 +25,9 @@
     --ease: cubic-bezier(0.4, 0, 0.2, 1);
   }
   html, body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 14.5px/1.55 var(--font-b);
     -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, h4, h5 { font-family: var(--font-h); font-weight: 600; }
   ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--ink); }
   header { padding: 14px 24px; border-bottom: 1px solid var(--border);
     display: flex; gap: 12px; align-items: center;
@@ -110,7 +111,11 @@
   .panel h2 { margin: 0 0 var(--sp-4); font-size: 13px; color: var(--accent);
     text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
   /* ── Workshop-DIY theme system (ported from /tools/ template) ── */
-  :root { --font-h: 'Righteous', 'Tajawal', sans-serif; }
+  :root {
+    --font-h: 'Fredoka', 'Tajawal', system-ui, sans-serif;
+    --font-b: 'Nunito', system-ui, -apple-system, sans-serif;
+    --font-display: 'Righteous', 'Fredoka', sans-serif;
+  }
   /* Default = mosque-gold */
   html, html[data-theme="mosque-gold"] {
     --bg: #08091a; --panel: #0b0d24; --code-bg: #05061a;
@@ -157,6 +162,45 @@
   /* Aliases kept for existing rule selectors */
   :root { --wsd-accent: var(--accent); --wsd-text-muted: var(--mute); --wsd-border: var(--border); }
 
+  /* ── Right-side drawers (Settings + Log) — overlay sidebar pattern from template ── */
+  .drawer-backdrop { position: fixed; inset: 0; z-index: 900;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+    opacity: 0; pointer-events: none; transition: opacity .25s var(--ease); }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; bottom: 0; right: 0;
+    width: min(440px, 90vw); background: var(--panel);
+    border-left: 1px solid var(--border); z-index: 901;
+    transform: translateX(100%); transition: transform .28s var(--ease);
+    display: flex; flex-direction: column;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-header { display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .drawer-header h3 { margin: 0; font: 600 16px/1.2 var(--font-h); color: var(--accent);
+    flex: 1; }
+  .drawer-close { background: transparent; border: 1px solid var(--border);
+    width: 32px; height: 32px; border-radius: 10px; cursor: pointer;
+    color: var(--ink); font-size: 14px; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; }
+  .drawer-log .logs { width: 100%; height: 100%; min-height: 400px; }
+  /* Wider log drawer */
+  .drawer-log { width: min(640px, 95vw); }
+
+  /* Settings sections */
+  .setting-group { margin-bottom: 22px; }
+  .setting-group h4 { margin: 0 0 10px; font-size: 11px; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--mute); font-weight: 600; }
+  .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .theme-swatch { display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--code-bg); cursor: pointer; font-size: 13px;
+    color: var(--ink); transition: all .15s var(--ease); }
+  .theme-swatch:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .theme-swatch.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .theme-swatch .dot { width: 14px; height: 14px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
+
   /* Theme-toast — flashes the theme name on cycle */
   .theme-toast { position: fixed; top: 16px; left: 50%;
     transform: translateX(-50%) translateY(-40px);
@@ -188,8 +232,8 @@
   }
   .wsd .title-block { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
   .wsd .title-block h1 {
-    font-family: var(--font-h);
-    font-size: 1.3rem; margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.45rem; margin: 0;
     letter-spacing: .06em; text-transform: uppercase;
     background: linear-gradient(135deg, var(--wsd-accent), var(--wsd-accent2), var(--wsd-accent));
     background-size: 200% 200%;
@@ -930,6 +974,44 @@
   <div class="lb-body" id="lbBody"><img id="lbImg"></div>
 </div>
 
+<!-- Drawers: settings (⚙️) + log (📜) — overlay from the right -->
+<div class="drawer-backdrop" id="drawerBackdrop" aria-hidden="true"></div>
+<aside class="drawer drawer-settings" id="settingsDrawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="drawer-header">
+    <h3 id="settingsTitle">⚙️ Settings</h3>
+    <button class="drawer-close" data-drawer-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="setting-group">
+      <h4>Theme</h4>
+      <div class="theme-grid" id="themeGrid"></div>
+    </div>
+    <div class="setting-group">
+      <h4>Session</h4>
+      <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer;">
+        <input type="checkbox" id="settingsAutoLoad"> auto-load last preset on open
+      </label>
+    </div>
+    <div class="setting-group">
+      <h4>Diagnostics</h4>
+      <p class="muted" style="font-size: 12px; line-height: 1.5; margin: 0;">
+        More settings here later (hotkeys, telemetry-free by design, env overrides). Report issues at
+        <a href="https://github.com/abourdim/route-shot/issues" target="_blank">GitHub</a>.
+      </p>
+    </div>
+  </div>
+</aside>
+<aside class="drawer drawer-log" id="logDrawer" role="dialog" aria-modal="true" aria-labelledby="logDrawerTitle">
+  <div class="drawer-header">
+    <h3 id="logDrawerTitle">📜 Activity log</h3>
+    <span class="muted" id="logDrawerStatus" style="font-size: 11px;"></span>
+    <button class="drawer-close" data-drawer-close aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body" style="padding: 14px 16px;">
+    <div id="logsMirror" class="logs" aria-live="polite"></div>
+  </div>
+</aside>
+
 <div class="deco-band" aria-hidden="true"></div>
 <footer class="app-footer">
   <span class="footer-text">powered by <a href="https://workshop-diy.org" target="_blank" rel="noopener">workshop-diy.org</a> · <a href="https://github.com/abourdim/route-shot" target="_blank" rel="noopener">github</a></span>
@@ -995,47 +1077,106 @@ function showThemeToast(name) {
   clearTimeout(showThemeToast._h);
   showThemeToast._h = setTimeout(() => t.classList.remove('show'), 1400);
 }
-// Cycle on click; persist.
-document.getElementById('themeBtn')?.addEventListener('click', () => {
+// ── Right-side drawers (Settings + Log) ──
+function openDrawer(which) {
+  const settings = document.getElementById('settingsDrawer');
+  const log      = document.getElementById('logDrawer');
+  const back     = document.getElementById('drawerBackdrop');
+  settings.classList.toggle('open', which === 'settings');
+  log.classList.toggle('open',      which === 'log');
+  back.classList.toggle('open', !!which);
+}
+function closeDrawer() { openDrawer(null); }
+document.getElementById('drawerBackdrop')?.addEventListener('click', closeDrawer);
+document.querySelectorAll('[data-drawer-close]').forEach((b) => b.addEventListener('click', closeDrawer));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+// Gear opens settings (not a theme toggle anymore).
+document.getElementById('themeBtn')?.addEventListener('click', () => openDrawer('settings'));
+
+// Render theme swatch grid inside the Settings drawer.
+function renderThemeGrid() {
+  const grid = document.getElementById('themeGrid'); if (!grid) return;
   const cur = document.documentElement.getAttribute('data-theme') || THEMES[0].id;
-  const next = THEMES[(THEMES.findIndex(t => t.id === cur) + 1) % THEMES.length];
-  applyTheme(next.id); showThemeToast(next.name);
-});
+  grid.innerHTML = '';
+  THEMES.forEach((t) => {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'theme-swatch' + (t.id === cur ? ' active' : '');
+    const dot = document.createElement('span'); dot.className = 'dot';
+    // read the theme's --accent by temporarily applying it
+    const probe = document.createElement('span');
+    probe.style.cssText = 'display:none';
+    probe.setAttribute('data-theme', t.id);
+    document.body.appendChild(probe);
+    // peek via a temp html attribute swap
+    const prev = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', t.id);
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    if (prev) document.documentElement.setAttribute('data-theme', prev);
+    else      document.documentElement.removeAttribute('data-theme');
+    probe.remove();
+    dot.style.background = accent;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(' ' + t.name));
+    btn.addEventListener('click', () => {
+      applyTheme(t.id);
+      renderThemeGrid();
+    });
+    grid.appendChild(btn);
+  });
+}
+document.addEventListener('DOMContentLoaded', renderThemeGrid);
+setTimeout(renderThemeGrid, 0);
 // Load saved theme on startup.
 (function initTheme() {
   let saved = THEMES[0].id;
   try { saved = localStorage.getItem(THEME_KEY) || saved; } catch {}
   applyTheme(saved);
 })();
-function jumpToLogs() {
-  setView('run');
-  setTimeout(() => {
-    const logs = document.getElementById('logs');
-    if (logs) logs.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    logs?.classList.add('flash'); setTimeout(() => logs?.classList.remove('flash'), 800);
-  }, 60);
-}
-document.getElementById('logScrollBtn')?.addEventListener('click', jumpToLogs);
-document.getElementById('logTicker')?.addEventListener('click', jumpToLogs);
-
-// Update the rail ticker whenever new log lines land. The Run view's
-// log pane is fed by pollLogs(); we watch it for changes via MutationObserver.
-(function wireLogTicker() {
+// 📜 opens the Activity log drawer (any view). Ticker click too.
+function openLogs() {
+  openDrawer('log');
   const logs = document.getElementById('logs');
+  const mirror = document.getElementById('logsMirror');
+  if (logs && mirror) {
+    mirror.textContent = logs.textContent;
+    mirror.scrollTop = mirror.scrollHeight;
+  }
+}
+document.getElementById('logScrollBtn')?.addEventListener('click', openLogs);
+document.getElementById('logTicker')?.addEventListener('click', openLogs);
+
+// Update the rail ticker + log drawer mirror whenever log lines arrive.
+(function wireLogTicker() {
+  const logs   = document.getElementById('logs');
   const ticker = document.getElementById('logTicker');
+  const mirror = document.getElementById('logsMirror');
+  const dstatus = document.getElementById('logDrawerStatus');
   if (!logs || !ticker) return;
   const refresh = () => {
-    const lines = logs.textContent.trim().split('\n').filter(Boolean);
-    if (!lines.length) { ticker.textContent = '(no runs yet)'; ticker.classList.add('empty'); return; }
-    const last = lines[lines.length - 1].slice(0, 80);
-    ticker.textContent = last;
-    ticker.classList.remove('empty');
-    // status pill drives running class on ticker too
+    const text = logs.textContent;
+    const lines = text.trim().split('\n').filter(Boolean);
+    if (!lines.length) { ticker.textContent = '(no runs yet)'; ticker.classList.add('empty'); }
+    else {
+      ticker.textContent = lines[lines.length - 1].slice(0, 80);
+      ticker.classList.remove('empty');
+    }
     const running = document.getElementById('status')?.classList.contains('running');
     ticker.classList.toggle('running', !!running);
+    if (mirror && document.getElementById('logDrawer')?.classList.contains('open')) {
+      const atBottom = (mirror.scrollHeight - mirror.scrollTop - mirror.clientHeight) < 40;
+      mirror.textContent = text;
+      if (atBottom) mirror.scrollTop = mirror.scrollHeight;
+    }
+    if (dstatus) {
+      dstatus.textContent = lines.length
+        ? `${lines.length} line${lines.length === 1 ? '' : 's'}${running ? ' · running' : ''}`
+        : '';
+    }
   };
   new MutationObserver(refresh).observe(logs, { childList: true, characterData: true, subtree: true });
   new MutationObserver(refresh).observe(document.getElementById('status'), { attributes: true, attributeFilter: ['class'] });
+  setTimeout(refresh, 0);
 })();
 (function renderHijri() {
   try {
