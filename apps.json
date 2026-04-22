@@ -4,30 +4,24 @@
     {
       "name": "bit-playground-connected",
       "url": "https://abourdim.github.io/bit-playground/",
-      "headful": true,
       "dismiss": "button:has-text(\"Let's Go\")",
+      "maxPages": 1,
+      "clickWait": 1800,
+      "headful": true,
       "preSteps": [
         {
-          "action": "click",
-          "selector": "#connectBtn"
-        },
-        {
           "action": "pause",
-          "value": "Pair your micro:bit in the Chrome popup, then click Resume here."
+          "value": "Do this in the page: 1) click Expert  2) click Connect + pair your micro:bit  3) wait for the Disconnect button to show  4) click Resume here."
         },
         {
           "action": "waitForSelector",
-          "selector": "#disconnectBtn:visible",
-          "timeout": 15000
+          "selector": "#disconnectBtn:visible"
         },
         {
           "action": "wait",
-          "value": 1500
+          "value": "1500"
         }
       ],
-      "clickMode": "sequential",
-      "clickWait": 1800,
-      "maxPages": 1,
       "clicks": [
         "#controlsTabBtn",
         "#sensesTabBtn",

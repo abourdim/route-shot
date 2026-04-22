@@ -13,7 +13,9 @@
         "#servosTabBtn",
         "#gamepadTabBtn",
         "#graphTabBtn",
-        "#board3dTabBtn"
+        "#board3dTabBtn",
+        "#benchTabBtn",
+        "#othersTabBtn"
       ]
     }
   ]
