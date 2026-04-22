@@ -1,39 +1,19 @@
 {
-  "_description": "Real micro:bit (or any Web Serial / BLE device) connected by hand. Headful Chromium opens, you click Connect + pair, then click Resume in the dashboard (or press Enter in terminal). Waits for the Disconnect button to appear (= connection confirmed) before snapshotting all 6 tabs. Sequential mode keeps the connection alive across clicks; longer clickWait so each tab has time to render live sensor data.",
   "apps": [
     {
-      "name": "bit-playground-connected",
+      "name": "bit-playground",
       "url": "https://abourdim.github.io/bit-playground/",
-      "headful": true,
       "dismiss": "button:has-text(\"Let's Go\")",
+      "autoButtons": true,
+      "autoButtonsBlocklist": "🌙|⚡|☁️|🔥|beginner",
+      "maxPages": 1,
       "preSteps": [
         {
-          "action": "pause",
-          "value": "Do this in the page: 1) click Expert  2) click Connect + pair your micro:bit  3) wait for the Disconnect button to show  4) click Resume here."
-        },
-        {
-          "action": "waitForSelector",
-          "selector": "#disconnectBtn:visible",
-          "timeout": 30000
-        },
-        {
-          "action": "wait",
-          "value": 1500
+          "action": "click",
+          "selector": "button:has-text(\"expert\")"
         }
       ],
-      "clickMode": "sequential",
-      "clickWait": 1800,
-      "maxPages": 1,
-      "clicks": [
-        "#controlsTabBtn",
-        "#sensesTabBtn",
-        "#servosTabBtn",
-        "#gamepadTabBtn",
-        "#graphTabBtn",
-        "#board3dTabBtn",
-        "#benchTabBtn",
-        "#othersTabBtn"
-      ]
+      "clickMode": "independent"
     }
   ]
 }

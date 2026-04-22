@@ -550,10 +550,27 @@ $('openFolderBtn').onclick = async () => {
 // accordion sections are open across page reloads.
 const SESSION_KEY = 'route-shot.session.v1';
 
+// Stable key for a <details> so its open/closed state can persist across
+// reloads. Prefer an explicit id; fall back to the first <summary> span text
+// (which is what renderForm() uses for dynamic accordion sections).
+function detailsKey(d) {
+  if (d.id) return 'id:' + d.id;
+  const titleEl = d.querySelector(':scope > summary span');
+  const title = (titleEl ? titleEl.textContent : (d.querySelector(':scope > summary')?.textContent || '')).trim();
+  return title ? 'title:' + title : null;
+}
+
 function saveSession() {
   try {
-    const openSections = [...document.querySelectorAll('details.section[open], details.panel-collapse[open]')]
-      .map((d) => d.querySelector('summary span')?.textContent).filter(Boolean);
+    // Snapshot every <details> on the page, not just classed ones — lets
+    // "Recent runs", "Raw JSON & presets", Import, Scan sub-details, etc. all
+    // remember their state independently.
+    const detailsState = {};
+    document.querySelectorAll('details').forEach((d) => {
+      const k = detailsKey(d); if (k) detailsState[k] = d.open;
+    });
+    // Back-compat shim — older restore paths still read this.
+    const openSections = Object.entries(detailsState).filter(([, v]) => v).map(([k]) => k);
     const data = {
       // form / preset
       preset:   $('presetSelect').value,
@@ -570,8 +587,9 @@ function saveSession() {
       // Manual session panel (URL + app name only — labels are per-snap)
       manualUrl:     $('manualUrl').value,
       manualAppName: $('manualAppName').value,
-      // Which accordions were open
-      openSections,
+      // Every <details> open/closed state, keyed by id or summary text.
+      detailsState,
+      openSections,  // legacy — still read by older restore logic
       ts: Date.now(),
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(data));
@@ -599,10 +617,21 @@ function restoreSession() {
     populateAppPick();
     renderForm();
   }
-  if (Array.isArray(s.openSections)) {
+  // Primary path: the new per-details map. Set open/closed explicitly so
+  // sections that were closed stay closed (the old code only opened, never
+  // closed — which made "Raw JSON & presets" [open by default] impossible
+  // to collapse persistently).
+  if (s.detailsState && typeof s.detailsState === 'object') {
+    document.querySelectorAll('details').forEach((d) => {
+      const k = detailsKey(d);
+      if (k && k in s.detailsState) d.open = s.detailsState[k];
+    });
+  } else if (Array.isArray(s.openSections)) {
+    // Back-compat with older saved sessions: treat the array as a present-or-
+    // absent flag, but still set explicitly so closed stays closed.
     document.querySelectorAll('details.section, details.panel-collapse').forEach((d) => {
       const title = d.querySelector('summary span')?.textContent;
-      if (title && s.openSections.includes(title)) d.open = true;
+      if (title) d.open = s.openSections.includes(title) || s.openSections.includes('title:' + title);
     });
   }
 }
@@ -625,7 +654,7 @@ function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveSe
 });
 $('appPick').addEventListener('change', scheduleSave);
 document.addEventListener('toggle', (e) => {
-  if (e.target.matches('details.section, details.panel-collapse')) scheduleSave();
+  if (e.target instanceof HTMLDetailsElement) scheduleSave();
 }, true);
 
 // Mirror Crawl-URL ↔ Scan-URL so the same URL only needs to be typed once.

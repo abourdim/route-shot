@@ -60,10 +60,51 @@ process.on('exit', () => { try { manual.browser?.close(); } catch {} });
 // appear in the captured image. display:none instead of removing so the
 // element and its event handlers survive to be clicked again.
 async function hideWidget(page) {
-  try { await page.evaluate(() => { const w = document.getElementById('__routeShotWidget'); if (w) w.style.display = 'none'; }); } catch {}
+  try {
+    await page.evaluate(() => {
+      const w = document.getElementById('__routeShotWidget'); if (w) w.style.display = 'none';
+      const b = document.getElementById('__routeShotCaptionBar'); if (b) b.dataset.prevDisplay = b.style.display, b.style.display = 'none';
+    });
+  } catch {}
 }
 async function showWidget(page) {
-  try { await page.evaluate(() => { const w = document.getElementById('__routeShotWidget'); if (w) w.style.display = ''; }); } catch {}
+  try {
+    await page.evaluate(() => {
+      const w = document.getElementById('__routeShotWidget'); if (w) w.style.display = '';
+      const b = document.getElementById('__routeShotCaptionBar'); if (b) b.style.display = b.dataset.prevDisplay || 'none';
+    });
+  } catch {}
+}
+
+// Draw an on-page caption bar so annotations become part of the screenshot.
+// Placed top-center with a generous contrast background so it's readable
+// against any site. Removed immediately after the screenshot is taken.
+async function showOverlay(page, text) {
+  if (!text) return;
+  try {
+    await page.evaluate((t) => {
+      const d = document.createElement('div');
+      d.id = '__routeShotOverlay';
+      d.textContent = t;
+      d.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);' +
+        'z-index:2147483646;max-width:80vw;padding:10px 18px;background:rgba(0,0,0,0.82);' +
+        'color:#fff;font:15px/1.35 system-ui;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.5);' +
+        'white-space:pre-wrap;text-align:center;';
+      document.documentElement.appendChild(d);
+    }, text);
+  } catch {}
+}
+async function removeOverlay(page) {
+  try { await page.evaluate(() => { const d = document.getElementById('__routeShotOverlay'); if (d) d.remove(); }); } catch {}
+}
+
+// Write a sidecar .json next to each screenshot with the capture metadata
+// (label, caption, url, timestamp). Useful for later review / regeneration.
+function writeSidecar(imgPath, meta) {
+  try {
+    const sidecar = imgPath.replace(/\.png$/i, '.json');
+    fs.writeFileSync(sidecar, JSON.stringify(meta, null, 2));
+  } catch {}
 }
 
 // Drain the window.__routeShot.queue the injected widget fills — no network
@@ -86,12 +127,18 @@ async function drainManualQueue() {
       fs.mkdirSync(outDir, { recursive: true });
       const labelPart = String(job.label || '').trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
       const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
+      const imgPath = path.join(outDir, fname);
+      // Caption is already live on the page (user-positioned). Just hide the
+      // widget chrome so it doesn't appear in the shot.
       await hideWidget(manual.page);
       try {
-        await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
-      } finally { await showWidget(manual.page); }
+        await manual.page.screenshot({ path: imgPath, fullPage: true });
+      } finally {
+        await showWidget(manual.page);
+      }
       const currentUrl = manual.page.url();
       const filename = `${manual.appName}/${fname}`;
+      writeSidecar(imgPath, { ts: Date.now(), url: currentUrl, label: job.label || '', caption: job.caption || '', note: job.note || '' });
       // Post the result back into the page so snap() can resolve.
       await manual.page.evaluate((r) => {
         window.__routeShot.results[r.id] = r;
@@ -489,80 +536,17 @@ const server = http.createServer(async (req, res) => {
       if (manual.page) await manualStop();
       try {
         const { chromium } = require('playwright');
-        manual.browser = await chromium.launch({ headless: false });
-        manual.context = await manual.browser.newContext();
+        manual.browser = await chromium.launch({
+          headless: false,
+          // Force the window to the foreground at launch. Without these flags,
+          // Playwright's chromium frequently opens behind the current terminal
+          // / dashboard window on Windows.
+          args: ['--start-maximized', '--new-window'],
+        });
+        manual.context = await manual.browser.newContext({ viewport: null });
         // Inject a floating 📸 widget + Ctrl/Cmd+Shift+S hotkey into every page
         // so the user never has to leave the Chromium window to trigger a snap.
-        await manual.context.addInitScript({
-          content: `
-            (function() {
-              if (window.top !== window) return;  // only in top frame
-              // Communication with the dashboard is via window-level flags —
-              // Playwright's page.evaluate() polls these server-side, so we
-              // bypass all network-level CORS / mixed-content / Windows firewall
-              // / Playwright-sandbox issues that block http fetches from this
-              // page to http://localhost.
-              window.__routeShot = window.__routeShot || { queue: [], results: {}, seq: 0 };
-              async function snap(label) {
-                const id = ++window.__routeShot.seq;
-                window.__routeShot.queue.push({ id, label: label || '' });
-                return await new Promise((resolve) => {
-                  const start = Date.now();
-                  (function poll() {
-                    if (window.__routeShot.results[id]) {
-                      const r = window.__routeShot.results[id];
-                      delete window.__routeShot.results[id];
-                      return resolve(r);
-                    }
-                    if (Date.now() - start > 5000) return resolve({ error: 'timeout waiting for dashboard' });
-                    setTimeout(poll, 100);
-                  })();
-                });
-              }
-              function flash(msg, ok) {
-                const b = document.createElement('div');
-                b.textContent = msg;
-                b.style.cssText = 'position:fixed;top:60px;right:16px;z-index:2147483647;padding:8px 14px;background:' +
-                  (ok?'#1a7f38':'#8a1f1f') + ';color:#fff;font:13px/1.4 system-ui;border-radius:4px;' +
-                  'box-shadow:0 4px 12px rgba(0,0,0,0.4);pointer-events:none;opacity:0.95;';
-                document.documentElement.appendChild(b);
-                setTimeout(() => b.remove(), 2200);
-              }
-              function setup() {
-                if (document.getElementById('__routeShotWidget')) return;
-                const w = document.createElement('div');
-                w.id = '__routeShotWidget';
-                w.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:2147483647;' +
-                  'display:flex;gap:6px;font:13px/1 system-ui;user-select:none;';
-                const input = document.createElement('input');
-                input.placeholder = 'label (optional)';
-                input.style.cssText = 'padding:8px 10px;border:1px solid #444;background:#222;color:#fff;border-radius:6px;outline:none;';
-                const btn = document.createElement('button');
-                btn.textContent = '📸 Snap';
-                btn.style.cssText = 'padding:8px 14px;border:0;background:#58a6ff;color:#000;font-weight:600;border-radius:6px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
-                btn.onclick = async () => {
-                  const r = await snap(input.value);
-                  if (r.error) flash('✗ ' + r.error, false);
-                  else { flash('📸 saved #' + r.count + ' — ' + r.filename, true); input.value = ''; }
-                };
-                w.appendChild(input); w.appendChild(btn);
-                document.documentElement.appendChild(w);
-              }
-              if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', setup);
-              } else setup();
-              document.addEventListener('keydown', async (e) => {
-                // Ctrl/Cmd + Shift + S — avoid clashing with browser's native Ctrl+S (save page)
-                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
-                  e.preventDefault();
-                  const r = await snap();
-                  if (r.error) flash('✗ ' + r.error, false);
-                  else flash('📸 saved #' + r.count, true);
-                }
-              }, true);
-            })();
-          `,
-        });
+        await manual.context.addInitScript({ path: path.join(ROOT, 'web', 'manual-widget.js') });
         manual.page    = await manual.context.newPage();
         manual.url     = body.url;
         manual.appName = (body.appName || 'manual').replace(/[^\w.-]/g, '_');
@@ -570,6 +554,9 @@ const server = http.createServer(async (req, res) => {
         // Poll the page's queue of snap requests every 150ms.
         manual.pollHandle = setInterval(drainManualQueue, 150);
         await manual.page.goto(body.url, { waitUntil: 'networkidle', timeout: 20000 });
+        // Raise the tab/window so the user can start interacting immediately
+        // instead of hunting for it behind the terminal.
+        try { await manual.page.bringToFront(); } catch {}
         if (body.dismiss) {
           for (const sel of String(body.dismiss).split(',').map((s) => s.trim()).filter(Boolean)) {
             try { const el = await manual.page.$(sel); if (el) await el.click({ timeout: 1000 }); } catch {}
@@ -589,20 +576,34 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Access-Control-Max-Age',               '86400');
       if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
       if (!manual.page) return json(res, 400, { error: 'no manual session — start one first' });
-      const labelRaw = req.method === 'GET'
-        ? (u.searchParams.get('label') || '')
-        : (((await readBody(req)) || {}).label || '');
+      let labelRaw = '', captionRaw = '', noteRaw = '';
+      if (req.method === 'GET') {
+        labelRaw   = u.searchParams.get('label')   || '';
+        captionRaw = u.searchParams.get('caption') || '';
+        noteRaw    = u.searchParams.get('note')    || '';
+      } else {
+        const body = (await readBody(req)) || {};
+        labelRaw   = body.label   || '';
+        captionRaw = body.caption || '';
+        noteRaw    = body.note    || '';
+      }
       try {
         manual.count++;
         const outDir = path.join(SHOTS, manual.appName);
         fs.mkdirSync(outDir, { recursive: true });
         const labelPart = String(labelRaw).trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
         const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
+        const imgPath = path.join(outDir, fname);
         await hideWidget(manual.page);
+        await showOverlay(manual.page, captionRaw);
         try {
-          await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
-        } finally { await showWidget(manual.page); }
+          await manual.page.screenshot({ path: imgPath, fullPage: true });
+        } finally {
+          await removeOverlay(manual.page);
+          await showWidget(manual.page);
+        }
         const currentUrl = manual.page.url();
+        writeSidecar(imgPath, { ts: Date.now(), url: currentUrl, label: labelRaw, caption: captionRaw, note: noteRaw });
         // GET fallback (image-ping) expects a tiny response — serve a 1x1 GIF
         if (req.method === 'GET') {
           const gif = Buffer.from('R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==', 'base64');
