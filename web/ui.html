@@ -552,13 +552,25 @@ const SESSION_KEY = 'route-shot.session.v1';
 
 function saveSession() {
   try {
-    const openSections = [...document.querySelectorAll('details.section[open]')].map((d) => d.querySelector('summary span').textContent);
+    const openSections = [...document.querySelectorAll('details.section[open], details.panel-collapse[open]')]
+      .map((d) => d.querySelector('summary span')?.textContent).filter(Boolean);
     const data = {
+      // form / preset
       preset:   $('presetSelect').value,
       autoLoad: $('presetAutoLoad').checked,
       appIdx:   currentIdx,
+      // Run panel
       url:      $('singleUrl').value,
-      scanUrl:  $('scanUrl').value,
+      // Scan panel
+      scanUrl:      $('scanUrl').value,
+      scanDismiss:  $('scanDismiss').value,
+      scanFilter:   $('scanFilter').value,
+      scanFilterVisible: $('scanFilterVisible').checked,
+      scanFilterWithId:  $('scanFilterWithId').checked,
+      // Manual session panel (URL + app name only — labels are per-snap)
+      manualUrl:     $('manualUrl').value,
+      manualAppName: $('manualAppName').value,
+      // Which accordions were open
       openSections,
       ts: Date.now(),
     };
@@ -569,8 +581,14 @@ function saveSession() {
 function restoreSession() {
   let s; try { s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch {}
   if (!s) return;
-  if (s.url)             $('singleUrl').value = s.url;
-  if (s.scanUrl)         $('scanUrl').value   = s.scanUrl;
+  if (s.url)             $('singleUrl').value  = s.url;
+  if (s.scanUrl)         $('scanUrl').value    = s.scanUrl;
+  if (s.scanDismiss)     $('scanDismiss').value = s.scanDismiss;
+  if (s.scanFilter)      $('scanFilter').value  = s.scanFilter;
+  if (typeof s.scanFilterVisible === 'boolean') $('scanFilterVisible').checked = s.scanFilterVisible;
+  if (typeof s.scanFilterWithId  === 'boolean') $('scanFilterWithId').checked  = s.scanFilterWithId;
+  if (s.manualUrl)       $('manualUrl').value     = s.manualUrl;
+  if (s.manualAppName)   $('manualAppName').value = s.manualAppName;
   if (typeof s.autoLoad === 'boolean') $('presetAutoLoad').checked = s.autoLoad;
   if (s.preset && [...$('presetSelect').options].some((o) => o.value === s.preset)) {
     $('presetSelect').value = s.preset;
@@ -582,9 +600,9 @@ function restoreSession() {
     renderForm();
   }
   if (Array.isArray(s.openSections)) {
-    document.querySelectorAll('details.section').forEach((d) => {
+    document.querySelectorAll('details.section, details.panel-collapse').forEach((d) => {
       const title = d.querySelector('summary span')?.textContent;
-      if (s.openSections.includes(title)) d.open = true;
+      if (title && s.openSections.includes(title)) d.open = true;
     });
   }
 }
@@ -592,13 +610,23 @@ function restoreSession() {
 // Save on any meaningful change. Debounced.
 let saveTimer;
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveSession, 400); }
-['singleUrl', 'scanUrl', 'presetSelect'].forEach((id) => {
-  $(id).addEventListener('input',  scheduleSave);
-  $(id).addEventListener('change', scheduleSave);
+[
+  'singleUrl', 'scanUrl', 'scanDismiss', 'scanFilter',
+  'manualUrl', 'manualAppName',
+  'presetSelect',
+].forEach((id) => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener('input',  scheduleSave);
+  el.addEventListener('change', scheduleSave);
+});
+['scanFilterVisible', 'scanFilterWithId', 'presetAutoLoad'].forEach((id) => {
+  $(id)?.addEventListener('change', scheduleSave);
 });
 $('appPick').addEventListener('change', scheduleSave);
-$('presetAutoLoad').addEventListener('change', scheduleSave);
-document.addEventListener('toggle', (e) => { if (e.target.matches('details.section')) scheduleSave(); }, true);
+document.addEventListener('toggle', (e) => {
+  if (e.target.matches('details.section, details.panel-collapse')) scheduleSave();
+}, true);
 
 // Mirror Crawl-URL ↔ Scan-URL so the same URL only needs to be typed once.
 $('singleUrl').addEventListener('input', () => {
