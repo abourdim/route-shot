@@ -258,6 +258,16 @@
       <div id="scansHistory" class="row" style="flex-wrap: wrap; gap: 4px; margin-top: 6px;"></div>
     </details>
     <div class="row muted" id="scanStatus"></div>
+    <div class="row" id="scanFilters" style="display: none;">
+      <input type="text" id="scanFilter" placeholder="Filter — type label / id / selector text…" style="flex: 1;">
+      <label class="muted" style="font-size: 12px; display:flex; align-items:center; gap:4px;">
+        <input type="checkbox" id="scanFilterVisible"> visible only
+      </label>
+      <label class="muted" style="font-size: 12px; display:flex; align-items:center; gap:4px;">
+        <input type="checkbox" id="scanFilterWithId"> with id only
+      </label>
+      <span class="muted" style="font-size: 11px;" id="scanFilterCount"></span>
+    </div>
     <div id="scanResults" style="max-height: 400px; overflow-y: auto;"></div>
     <div class="row" id="scanActions" style="display: none;">
       <button id="scanAllBtn">Select all</button>
@@ -804,6 +814,9 @@ $('scanBtn').onclick = async () => {
     scanItems = r.items;
     renderScanTable();
     publishScanDatalists();
+    $('scanFilters').style.display = 'flex';
+    $('scanFilter').value = '';
+    applyScanFilter();
     $('scanStatus').textContent = `Found ${r.count} clickable element(s) — ${r.items.filter(i=>i.visible).length} visible. ` +
       `Pickable from form-field dropdowns now.`;
     $('scanActions').style.display = 'flex';
@@ -863,8 +876,36 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-$('scanAllBtn').onclick    = () => document.querySelectorAll('.scan-cb').forEach((cb) => cb.checked = true);
-$('scanNoneBtn').onclick   = () => document.querySelectorAll('.scan-cb').forEach((cb) => cb.checked = false);
+function applyScanFilter() {
+  const q = $('scanFilter').value.trim().toLowerCase();
+  const visOnly = $('scanFilterVisible').checked;
+  const idOnly  = $('scanFilterWithId').checked;
+  let shown = 0, total = 0;
+  document.querySelectorAll('#scanResults tr[data-i]').forEach((tr) => {
+    total++;
+    const it = scanItems[Number(tr.dataset.i)];
+    let ok = true;
+    if (q) {
+      const hay = `${it.text || ''} ${it.id || ''} ${it.selector || ''} ${it.tag || ''}`.toLowerCase();
+      if (!hay.includes(q)) ok = false;
+    }
+    if (ok && visOnly && !it.visible) ok = false;
+    if (ok && idOnly  && !it.id)      ok = false;
+    tr.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  });
+  $('scanFilterCount').textContent = total ? `${shown}/${total} shown` : '';
+}
+$('scanFilter').addEventListener('input', applyScanFilter);
+$('scanFilterVisible').addEventListener('change', applyScanFilter);
+$('scanFilterWithId').addEventListener('change', applyScanFilter);
+
+// Select-all / none / visible operate only on currently-visible (filtered) rows
+function visibleScanRows() {
+  return [...document.querySelectorAll('#scanResults tr[data-i]')].filter((tr) => tr.style.display !== 'none');
+}
+$('scanAllBtn').onclick    = () => visibleScanRows().forEach((tr) => { tr.querySelector('.scan-cb').checked = true;  });
+$('scanNoneBtn').onclick   = () => visibleScanRows().forEach((tr) => { tr.querySelector('.scan-cb').checked = false; });
 $('scanVisibleBtn').onclick = () => {
   document.querySelectorAll('#scanResults tr[data-i]').forEach((tr) => {
     const i = Number(tr.dataset.i);
