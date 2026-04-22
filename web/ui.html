@@ -35,6 +35,13 @@
     border-radius: 8px; padding: 18px 22px; }
   .panel h2 { margin: 0 0 14px; font-size: 14px; color: var(--accent);
     text-transform: uppercase; letter-spacing: 0.5px; }
+  /* Hero panels (Manual + Screenshots) — front-of-page, accent left rule, larger heading */
+  .panel.hero { border-left: 4px solid var(--accent); padding: 22px 26px 22px 24px;
+    background: linear-gradient(180deg, rgba(88,166,255,0.05), var(--panel) 60%); }
+  .panel.hero h2 { font-size: 16px; margin: 0 0 16px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .panel.hero h2 .hero-sub { font-size: 12px; color: var(--mute); font-weight: normal;
+    text-transform: none; letter-spacing: 0; }
   .row { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
   button, .btn { background: var(--bg); color: var(--ink); border: 1px solid var(--border);
     padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px;
@@ -254,6 +261,36 @@
 </header>
 
 <main>
+  <section class="panel hero" style="grid-column: 1 / -1;">
+    <h2>📸 Manual snapshot session
+      <span class="hero-sub">drive a headful browser by hand · Ctrl/Cmd+Shift+S snaps</span>
+      <span class="summary-tag" id="manualSummaryTag" style="margin-left: auto; align-self: center;">idle</span>
+    </h2>
+    <p class="muted" style="font-size: 12.5px; margin: 0 0 14px; max-width: 900px;">
+      Open a headful Chromium, drive it by hand, snapshot whenever. A floating <b>📸 Snap</b> widget injects into the bottom-right of every page; <b>Ctrl/Cmd+Shift+S</b> also works. Ideal for hardware pairing, login flows, tricky modal states.
+    </p>
+    <div class="row">
+      <input type="text" id="manualUrl" placeholder="https://example.com" style="flex: 2;">
+      <input type="text" id="manualAppName" placeholder="app name (folder)" style="flex: 1;" value="manual">
+      <button id="manualStart" class="primary">Start session</button>
+      <button id="manualStop" disabled>Stop</button>
+    </div>
+    <div class="row">
+      <input type="text" id="manualLabel" placeholder="snapshot label (optional) — becomes part of the filename" style="flex: 1;">
+      <button id="manualSnap" disabled title="Ctrl/Cmd+S also works">📸 Snapshot</button>
+    </div>
+    <div id="manualStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+  </section>
+
+  <section class="panel hero" style="grid-column: 1 / -1;">
+    <h2>🖼️ Screenshots
+      <span class="hero-sub">every captured file · click a thumbnail for the lightbox</span>
+      <span class="muted" id="shotCount" style="margin-left: auto; align-self: center;"></span>
+    </h2>
+    <div id="indexes"></div>
+    <div class="gallery" id="gallery"></div>
+  </section>
+
   <section class="panel">
     <h2>Run</h2>
     <div class="row">
@@ -365,34 +402,6 @@
     </details>
   </section>
 
-  <section class="panel" style="grid-column: 1 / -1;">
-    <h2>Screenshots <span class="muted" id="shotCount"></span></h2>
-    <div id="indexes"></div>
-    <div class="gallery" id="gallery"></div>
-  </section>
-
-  <details class="panel-collapse" style="grid-column: 1 / -1;">
-    <summary>
-      <span>📸 Manual snapshot session</span>
-      <span class="summary-tag" id="manualSummaryTag">idle</span>
-    </summary>
-    <div class="panel-body">
-      <p class="muted" style="font-size: 12px; margin: 6px 0 10px;">
-        Open a headful Chromium, drive it by hand, snapshot whenever. A floating <b>📸 Snap</b> widget (bottom-right of every page) and <b>Ctrl/Cmd+Shift+S</b> hotkey inject into the target page so you never have to leave the browser window. Ideal for hardware pairing, login flows, tricky modal states.
-      </p>
-      <div class="row">
-        <input type="text" id="manualUrl" placeholder="https://example.com" style="flex: 2;">
-        <input type="text" id="manualAppName" placeholder="app name (folder)" style="flex: 1;" value="manual">
-        <button id="manualStart" class="primary">Start session</button>
-        <button id="manualStop" disabled>Stop</button>
-      </div>
-      <div class="row">
-        <input type="text" id="manualLabel" placeholder="snapshot label (optional) — becomes part of the filename" style="flex: 1;">
-        <button id="manualSnap" disabled title="Ctrl/Cmd+S also works">📸 Snapshot</button>
-      </div>
-      <div id="manualStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
-    </div>
-  </details>
 
   <details class="panel-collapse" open style="grid-column: 1 / -1;">
     <summary>
