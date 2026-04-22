@@ -247,6 +247,38 @@ cmd_dashboard() {
     open_url "$url"
 }
 
+cmd_dashboard_stop() {
+    local pid_file="$SCRIPT_DIR/.dashboard.pid"
+    local stopped=0
+    # 1. PID file
+    if [ -f "$pid_file" ]; then
+        local pid; pid="$(cat "$pid_file")"
+        if [ -n "$pid" ]; then
+            taskkill //F //PID "$pid" >/dev/null 2>&1 || kill "$pid" 2>/dev/null && stopped=1
+        fi
+        rm -f "$pid_file"
+    fi
+    # 2. Anything still listening on a likely dashboard port (8080..8099)
+    for port in 8080 8081 8082 8083 8084 8085; do
+        local listener
+        listener=$(netstat -ano 2>/dev/null | grep -E "[: ]$port +.*LISTENING" | awk '{print $NF}' | head -1)
+        if [ -n "$listener" ]; then
+            taskkill //F //PID "$listener" >/dev/null 2>&1 && stopped=1
+        fi
+    done
+    if [ "$stopped" = "1" ]; then
+        printf "\n${G}Dashboard stopped.${NC}\n\n"
+    else
+        printf "\n${Y}No running dashboard found.${NC}\n\n"
+    fi
+}
+
+cmd_dashboard_restart() {
+    cmd_dashboard_stop >/dev/null 2>&1
+    sleep 0.5
+    cmd_dashboard
+}
+
 cmd_stop_server() {
     if [ -f "$SERVER_PID_FILE" ]; then
         local pid
@@ -293,12 +325,14 @@ menu() {
     printf "  4) Batch run (apps.json)\n"
     printf "  5) Import DevTools Recorder → apps.json\n"
     printf "  6) Launch web dashboard\n"
-    printf "  7) Start static server    (http://localhost:%s)\n" "$SERVER_PORT"
-    printf "  8) Open in browser\n"
-    printf "  9) Stop static server\n"
-    printf " 10) Open screenshots folder\n"
-    printf " 11) Clean screenshots\n"
-    printf " 12) Exit\n"
+    printf "  7) Restart web dashboard  (kill + relaunch, picks up code changes)\n"
+    printf "  8) Stop web dashboard\n"
+    printf "  9) Start static server    (http://localhost:%s)\n" "$SERVER_PORT"
+    printf " 10) Open in browser\n"
+    printf " 11) Stop static server\n"
+    printf " 12) Open screenshots folder\n"
+    printf " 13) Clean screenshots\n"
+    printf " 14) Exit\n"
     printf "\n"
 }
 
@@ -314,12 +348,14 @@ while true; do
         4) cmd_batch ;;
         5) cmd_import ;;
         6) cmd_dashboard ;;
-        7) cmd_server ;;
-        8) cmd_open_web ;;
-        9) cmd_stop_server ;;
-        10) cmd_open ;;
-        11) cmd_clean ;;
-        12|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; exit 0 ;;
+        7) cmd_dashboard_restart ;;
+        8) cmd_dashboard_stop ;;
+        9) cmd_server ;;
+        10) cmd_open_web ;;
+        11) cmd_stop_server ;;
+        12) cmd_open ;;
+        13) cmd_clean ;;
+        14|q|Q|exit) printf "\nBye.\n"; cmd_stop_server >/dev/null 2>&1; cmd_dashboard_stop >/dev/null 2>&1; exit 0 ;;
         *) printf "\n${R}Invalid choice.${NC}\n" ;;
     esac
 done
