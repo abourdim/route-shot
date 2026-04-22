@@ -8,11 +8,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Righteous&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
+  /* Only non-theme tokens live here; theme colours are set by
+     html[data-theme="…"] rules further down (and default to mosque-gold). */
   :root {
-    --bg: #0f1419; --panel: #161b22; --ink: #e6edf3; --mute: #aeb6bf;
-    --accent: #58a6ff; --good: #3fb950; --warn: #d29922; --bad: #f85149;
-    --code-bg: #0d1117; --border: #30363d;
-    --danger-bg: #2a1416; --danger-border: #6a2a2f;
+    --danger-bg: color-mix(in srgb, var(--bad) 22%, var(--bg));
+    --danger-border: color-mix(in srgb, var(--bad) 55%, var(--border));
   }
   * { box-sizing: border-box; }
   :root {
