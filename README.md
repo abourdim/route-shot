@@ -55,8 +55,8 @@ The prompt always shows the current best guess as the default — press Enter to
 
 ```bash
 npm install
-node route-shot.js https://example.com            # positional arg
-START_URL=https://example.com node route-shot.js  # or env var
+node src/route-shot.js https://example.com            # positional arg
+START_URL=https://example.com node src/route-shot.js  # or env var
 ```
 
 Or install globally and use the `route-shot` command:
@@ -85,13 +85,13 @@ All options are environment variables — no flags to remember:
 Example:
 
 ```bash
-START_URL=https://example.com MAX_PAGES=50 OUTPUT_DIR=./out node route-shot.js
+START_URL=https://example.com MAX_PAGES=50 OUTPUT_DIR=./out node src/route-shot.js
 ```
 
 Dismiss a welcome modal before capturing:
 
 ```bash
-DISMISS_SELECTOR='button:has-text("Let'"'"'s Go")' node route-shot.js https://example.com
+DISMISS_SELECTOR='button:has-text("Let'"'"'s Go")' node src/route-shot.js https://example.com
 ```
 
 Capture each SPA tab as a variant screenshot (same URL, different view state):
@@ -99,7 +99,7 @@ Capture each SPA tab as a variant screenshot (same URL, different view state):
 ```bash
 DISMISS_SELECTOR='button:has-text("Let'"'"'s Go")' \
 CLICK_SELECTORS='button:has-text("Sensors"),button:has-text("Motors"),button:has-text("GamePad"),button:has-text("Graph")' \
-node route-shot.js https://abourdim.github.io/bit-playground/
+node src/route-shot.js https://abourdim.github.io/bit-playground/
 ```
 
 ## Batch mode (many apps)
@@ -107,7 +107,7 @@ node route-shot.js https://abourdim.github.io/bit-playground/
 Describe every app you want to snapshot in a JSON file, then run:
 
 ```bash
-node route-shot.js --batch apps.json
+node src/route-shot.js --batch apps.json
 ```
 
 See [apps.example.json](apps.example.json). Each app supports:
@@ -149,10 +149,10 @@ Pair this with Chrome DevTools Recorder — and let route-shot do the translatio
 ```bash
 # 1. In Chrome DevTools → Recorder → record → Export as "JSON" → save login.json
 # 2. Convert + merge into apps.json in one command:
-node route-shot.js --import-recording login.json --name my-app --merge apps.json
+node src/route-shot.js --import-recording login.json --name my-app --merge apps.json
 
 # 3. Run the batch — the login preSteps play, then auto-explore takes over
-node route-shot.js --batch apps.json
+node src/route-shot.js --batch apps.json
 ```
 
 Without `--merge`, the command prints the JSON app entry to stdout so you can paste it manually. Use `--name` to override the app name (defaults to the Recorder title).
@@ -212,4 +212,4 @@ screenshots/
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](docs/LICENSE).

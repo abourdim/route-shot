@@ -2,12 +2,13 @@
   "name": "route-shot",
   "version": "1.0.0",
   "description": "Visit every route of a web app and save a full-page screenshot of each one.",
-  "main": "route-shot.js",
+  "main": "src/route-shot.js",
   "bin": {
-    "route-shot": "route-shot.js"
+    "route-shot": "src/route-shot.js"
   },
   "scripts": {
-    "start": "node route-shot.js",
+    "start": "node src/route-shot.js",
+    "dashboard": "node src/server.js",
     "postinstall": "playwright install chromium"
   },
   "keywords": [
@@ -27,9 +28,12 @@
     "node": ">=18"
   },
   "files": [
-    "route-shot.js",
+    "src/route-shot.js",
+    "src/server.js",
+    "web/ui.html",
+    "web/userguide.html",
     "menu.sh",
     "README.md",
-    "LICENSE"
+    "docs/LICENSE"
   ]
 }

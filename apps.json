@@ -4,16 +4,19 @@
       "name": "bit-playground",
       "url": "https://abourdim.github.io/bit-playground/",
       "dismiss": "button:has-text(\"Let's Go\")",
+      "maxPages": 1,
       "autoButtons": true,
       "autoButtonsBlocklist": "🌙|⚡|☁️|🔥|beginner",
-      "maxPages": 1,
+      "clickMode": "independent",
       "preSteps": [
         {
           "action": "click",
           "selector": "button:has-text(\"expert\")"
+        },
+        {
+          "action": "click"
         }
-      ],
-      "clickMode": "independent"
+      ]
     }
   ]
 }

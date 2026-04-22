@@ -1034,7 +1034,7 @@ function renderForm() {
   host.style.gridTemplateColumns = '1fr';
   host.style.display = 'block';
 
-  section('Essentials', `${app.name || 'unnamed'} → ${app.url || '?'}`, true,
+  section('Essentials', `${app.name || 'unnamed'} → ${app.url || '?'}`, false,
     field('name', name, 'A label — becomes the screenshots subfolder name.'),
     field('url',  url,  'Start URL. The crawler always begins here.'),
   );
@@ -1045,7 +1045,7 @@ function renderForm() {
       app.dismiss ? 'has dismiss' : null,
       app.includeHash ? 'hash routes' : null,
     ].filter(Boolean).join(' · '),
-    !!(app.dismiss || app.maxPages || app.includeHash),
+    false,
     field('dismiss', dismiss, 'Selector clicked right after page load — usually a welcome modal or cookie banner. Pick from the example dropdown OR scan the page and use 📋.', { inline: [dismissPick] }),
     field('maxPages', maxPages, 'How many pages to BFS-crawl from start. <b>Set to 1</b> to snapshot only the start page.'),
     field('includeHash', includeHash, 'Treat <code>#/foo</code> and <code>#/bar</code> as separate pages (for hash-routed SPAs).'),
@@ -1053,7 +1053,7 @@ function renderForm() {
 
   section('Auto-discover buttons',
     app.autoButtons ? `enabled${app.autoButtonsBlocklist ? ', blocklist set' : ''}` : 'off',
-    !!app.autoButtons,
+    false,
     field('autoButtons', autoBtn, 'Auto-discover and click every <code>&lt;button&gt;</code>. One screenshot per discovered button.'),
     field('autoButtonsBlocklist', block, 'Regex (case-insensitive, <code>|</code> = OR) of button texts to skip.'),
     field('autoButtonsMax', blockMax, 'Cap on auto-discovered buttons per page (default 40).'),
@@ -1063,14 +1063,14 @@ function renderForm() {
 
   section('Setup steps (preSteps)',
     `${(app.preSteps || []).length} step(s)`,
-    !!(app.preSteps && app.preSteps.length),
+    false,
     field('preSteps', preBox, 'Run after dismiss, before crawling. Replayed on every independent reload (use for login, mode toggles).'),
     field('', addBtn),
   );
 
   section('Explicit clicks',
     `${(app.clicks || []).length} selector(s)`,
-    !!(app.clicks && app.clicks.length),
+    false,
     field('clicks', clicksWrap, 'Selectors to click (one per line). Each becomes a variant screenshot. Use 📋 to pick from scanned buttons.'),
   );
 

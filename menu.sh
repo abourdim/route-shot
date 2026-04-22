@@ -3,7 +3,7 @@
 # Usage: chmod +x menu.sh && ./menu.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CRAWLER="$SCRIPT_DIR/route-shot.js"
+CRAWLER="$SCRIPT_DIR/src/route-shot.js"
 OUTPUT_DIR="$SCRIPT_DIR/screenshots"
 SERVER_PORT="${ROUTE_SHOT_PORT:-8000}"
 SERVER_PID_FILE="$SCRIPT_DIR/.server.pid"
@@ -180,8 +180,8 @@ cmd_open_web() {
 
 cmd_dashboard() {
     printf "\n${BOLD}Launch web dashboard${NC}\n"
-    if [ ! -f "$SCRIPT_DIR/server.js" ]; then
-        printf "${R}Missing:${NC} %s/server.js\n\n" "$SCRIPT_DIR"
+    if [ ! -f "$SCRIPT_DIR/src/server.js" ]; then
+        printf "${R}Missing:${NC} %s/src/server.js\n\n" "$SCRIPT_DIR"
         return 1
     fi
     local port=8080
@@ -193,7 +193,7 @@ cmd_dashboard() {
         printf "${Y}Dashboard already running on port %s.${NC}\n" "$port"
     else
         cd "$SCRIPT_DIR" || return 1
-        node server.js "$port" > "$SCRIPT_DIR/.dashboard.log" 2>&1 &
+        node src/server.js "$port" > "$SCRIPT_DIR/.dashboard.log" 2>&1 &
         local pid=$!
         echo "$pid" > "$SCRIPT_DIR/.dashboard.pid"
         disown "$pid" 2>/dev/null || true

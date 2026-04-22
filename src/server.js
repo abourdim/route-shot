@@ -10,8 +10,9 @@ const { spawn }  = require('child_process');
 const { URL }    = require('url');
 
 const PORT     = Number(process.argv[2] || process.env.PORT || 8080);
-const ROOT     = __dirname;
-const CRAWLER  = path.join(ROOT, 'route-shot.js');
+const ROOT     = path.resolve(__dirname, '..');   // project root (src/ lives one level down)
+const WEB      = path.join(ROOT, 'web');
+const CRAWLER  = path.join(__dirname, 'route-shot.js');
 const APPS_CFG = path.join(ROOT, 'apps.json');
 const SHOTS    = path.join(ROOT, 'screenshots');
 const HISTORY  = path.join(ROOT, '.history.json');
@@ -182,10 +183,10 @@ const server = http.createServer(async (req, res) => {
   try {
     // static: dashboard
     if (pathname === '/' || pathname === '/index.html') {
-      return serveFile(res, path.join(ROOT, 'ui.html'));
+      return serveFile(res, path.join(WEB, 'ui.html'));
     }
     if (pathname === '/userguide.html') {
-      return serveFile(res, path.join(ROOT, 'userguide.html'));
+      return serveFile(res, path.join(WEB, 'userguide.html'));
     }
 
     // static: screenshots
