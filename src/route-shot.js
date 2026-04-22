@@ -88,7 +88,14 @@ async function runSteps(page, steps, navTimeout) {
     else if (action === 'fill')       await page.locator(step.selector).first().fill(step.value ?? '', { timeout: 5000 });
     else if (action === 'press')      await page.locator(step.selector).first().press(step.value || 'Enter', { timeout: 5000 });
     else if (action === 'selectOption') await page.locator(step.selector).first().selectOption(step.value, { timeout: 5000 });
-    else if (action === 'evaluate')   await page.evaluate(step.value || '');
+    else if (action === 'evaluate') {
+      // Arbitrary JS eval — gated behind an explicit opt-in so a malicious
+      // apps.json / imported recording can't execute code by default.
+      if (process.env.ROUTE_SHOT_ALLOW_EVAL !== '1') {
+        throw new Error("'evaluate' preStep is disabled by default. Set ROUTE_SHOT_ALLOW_EVAL=1 to allow it.");
+      }
+      await page.evaluate(step.value || '');
+    }
     else if (action === 'waitForSelector') await page.waitForSelector(step.selector, { timeout: step.timeout || 10000 });
     else if (action === 'waitForURL') await page.waitForURL(step.value || step.url, { timeout: step.timeout || 10000 });
     else if (action === 'wait')       await page.waitForTimeout(Number(step.value || step.ms || 500));

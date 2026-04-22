@@ -148,13 +148,14 @@ cmd_import() {
     read -r -p "  Choice [2]: " mode
     read -r -p "  Merge into apps.json? [Y/n]: " ans
     cd "$SCRIPT_DIR" || return 1
-    local merge_args=""
-    case "$ans" in n|N|no|NO) merge_args="" ;; *) merge_args="--merge apps.json" ;; esac
-    local name_args=""
-    [ -n "$name" ] && name_args="--name $name"
-    local mode_args="--as-clicks"
-    case "$mode" in 1) mode_args="" ;; esac
-    node "$CRAWLER" --import-recording "$rec" $name_args $mode_args $merge_args
+    local mode_flag=""
+    case "$mode" in 1) mode_flag="" ;; *) mode_flag="--as-clicks" ;; esac
+    # Build argv as an array so values with spaces / shell metachars stay quoted.
+    local args=(--import-recording "$rec")
+    [ -n "$name" ] && args+=(--name "$name")
+    [ -n "$mode_flag" ] && args+=("$mode_flag")
+    case "$ans" in n|N|no|NO) ;; *) args+=(--merge apps.json) ;; esac
+    node "$CRAWLER" "${args[@]}"
     printf "\n"
 }
 

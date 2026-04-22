@@ -161,21 +161,51 @@ function serveFile(res, filePath, fallbackType) {
 }
 
 function safeJoin(base, rel) {
-  const full = path.normalize(path.join(base, decodeURIComponent(rel)));
-  if (!full.startsWith(base)) return null;  // path traversal guard
+  let decoded;
+  try { decoded = decodeURIComponent(rel); } catch { return null; }
+  // Reject absolute paths and any '..' segment outright — don't rely solely on
+  // normalize+startsWith since edge cases (encoded slashes, symlinks) can slip.
+  if (!decoded || decoded.includes('\0')) return null;
+  if (path.isAbsolute(decoded)) return null;
+  const parts = decoded.split(/[/\\]/);
+  if (parts.some((p) => p === '..')) return null;
+  const full = path.normalize(path.join(base, decoded));
+  const baseWithSep = base.endsWith(path.sep) ? base : base + path.sep;
+  if (full !== base && !full.startsWith(baseWithSep)) return null;
   return full;
 }
+
+const MAX_BODY_BYTES = 10 * 1024 * 1024;   // 10MB cap — defense against DoS via giant JSON
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (c) => chunks.push(c));
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error('request body too large'));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on('end', () => {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}')); }
       catch (e) { reject(e); }
     });
     req.on('error', reject);
   });
+}
+
+// Accept only http(s) URLs — reject javascript:, file:, data:, etc. before
+// they ever reach the spawned crawler / headful Playwright page.
+function isSafeHttpUrl(s) {
+  if (typeof s !== 'string' || s.length > 2048) return false;
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch { return false; }
 }
 
 function json(res, status, obj) {
@@ -415,7 +445,7 @@ const server = http.createServer(async (req, res) => {
     // API: run single URL
     if (pathname === '/api/run/single' && req.method === 'POST') {
       const body = await readBody(req);
-      if (!body.url) return json(res, 400, { error: 'url required' });
+      if (!isSafeHttpUrl(body.url)) return json(res, 400, { error: 'valid http(s) url required' });
       pushHistory('runs', body.url);
       const r = spawnCrawler([body.url], `single: ${body.url}`);
       return json(res, r.error ? 409 : 200, r);
@@ -442,7 +472,7 @@ const server = http.createServer(async (req, res) => {
     // /api/manual/snapshot at key moments).
     if (pathname === '/api/manual/start' && req.method === 'POST') {
       const body = await readBody(req);
-      if (!body.url) return json(res, 400, { error: 'url required' });
+      if (!isSafeHttpUrl(body.url)) return json(res, 400, { error: 'valid http(s) url required' });
       if (manual.page) await manualStop();
       try {
         const { chromium } = require('playwright');
@@ -590,7 +620,7 @@ const server = http.createServer(async (req, res) => {
     // API: scan — launch Playwright, goto URL, dismiss, enumerate clickables
     if (pathname === '/api/scan' && req.method === 'POST') {
       const body = await readBody(req);
-      if (!body.url) return json(res, 400, { error: 'url required' });
+      if (!isSafeHttpUrl(body.url)) return json(res, 400, { error: 'valid http(s) url required' });
       pushHistory('scans', body.url);
       try {
         const { chromium } = require('playwright');
@@ -667,7 +697,8 @@ const server = http.createServer(async (req, res) => {
     res.end('404');
   } catch (e) {
     console.error(e);
-    json(res, 500, { error: String(e.message || e) });
+    const status = /body too large/i.test(String(e.message)) ? 413 : 500;
+    json(res, status, { error: String(e.message || e) });
   }
 });
 

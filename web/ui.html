@@ -1370,7 +1370,7 @@ function renderForm() {
   host.style.gridTemplateColumns = '1fr';
   host.style.display = 'block';
 
-  section('Essentials', `${app.name || 'unnamed'} → ${app.url || '?'}`, false,
+  section('Essentials', `${escapeHtml(app.name || 'unnamed')} → ${escapeHtml(app.url || '?')}`, false,
     field('name', name, 'A label — becomes the screenshots subfolder name.'),
     field('url',  url,  'Start URL. The crawler always begins here.'),
   );
