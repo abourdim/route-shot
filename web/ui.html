@@ -1144,6 +1144,29 @@ function updatePreflight() {
 document.addEventListener('DOMContentLoaded', updatePreflight);
 setTimeout(updatePreflight, 300);  // after galleryFiles arrives
 
+// Format a "✓ produced <file> + [📂 open folder]" status line used by every
+// export handler. `suffix` is appended in parens after the filename.
+function renderProduced(file, suffix) {
+  const href = '/' + encodeURI(file);
+  const folder = file.split('/').slice(0, -1).join('/');
+  const safeFile = escapeHtml(file);
+  const safeFolder = escapeHtml(folder);
+  const tail = suffix ? ` <span class="muted">(${escapeHtml(suffix)})</span>` : '';
+  return `✓ <a href="${href}" target="_blank" style="color: var(--accent);">${safeFile}</a>${tail}` +
+         `<br><button class="ghost" data-open-folder="${safeFolder}" style="font-size: 11px; padding: 2px 8px; margin-top: 4px;" title="Open ${safeFolder} in your OS file manager">📂 open folder</button>` +
+         ` <span class="muted" style="font-size: 11px;">${safeFolder}</span>`;
+}
+
+// Delegated listener — any element with data-open-folder posts to the server.
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-open-folder]');
+  if (!btn) return;
+  const relPath = btn.getAttribute('data-open-folder');
+  try {
+    await postJson('/api/open-folder', { path: relPath });
+  } catch (err) { alert('open-folder failed: ' + err.message); }
+});
+
 async function postJson(url, body) {
   const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
@@ -1167,7 +1190,7 @@ $('promoGoBtn')?.addEventListener('click', async () => {
       theme:   $('promoTheme').value,
       accent:  $('promoAccent').value,
     });
-    $('promoStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ')';
+    $('promoStatus').innerHTML = renderProduced('screenshots/' + r.file, `${r.w}×${r.h}`);
     loadGallery();
   } catch (e) { $('promoStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
@@ -1186,7 +1209,7 @@ $('galleryGoBtn')?.addEventListener('click', async () => {
   try {
     const r = await postJson('/api/export/gallery', { app, title: $('exportTitle').value });
     lastGalleryRun = r.run;
-    $('galleryStatus').innerHTML = '✓ <a href="/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> — ' + r.count + ' slide(s)';
+    $('galleryStatus').innerHTML = renderProduced(r.file, `${r.count} slide(s)`);
   } catch (e) { $('galleryStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
 });
@@ -1201,7 +1224,7 @@ $('pdfGoBtn')?.addEventListener('click', async () => {
     const g = await postJson('/api/export/gallery', { app, title: $('exportTitle').value });
     lastGalleryRun = g.run;
     const r = await postJson('/api/export/pdf', { run: g.run });
-    $('galleryStatus').innerHTML = '✓ <a href="/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a>';
+    $('galleryStatus').innerHTML = renderProduced(r.file);
   } catch (e) { $('galleryStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
 });
@@ -1352,12 +1375,17 @@ async function pollBatchStatus() {
       stopBatchPolling();
       const failNote = s.failed > 0 ? ` · ${s.failed} failed` : '';
       const stopNote = s.stopRequested ? ' (stopped)' : '';
+      const runFolder = s.runName ? `videos/${s.runName}` : null;
       const compareHref = s.runName ? `/videos/${encodeURIComponent(s.runName)}/compare.html` : null;
+      const folderBtn = runFolder
+        ? ` <button class="ghost" data-open-folder="${escapeHtml(runFolder)}" style="font-size: 11px; padding: 2px 8px;" title="Open ${escapeHtml(runFolder)}">📂 open folder</button> <span class="muted" style="font-size: 11px;">${escapeHtml(runFolder)}</span>`
+        : '';
       $('batchStatus').innerHTML =
         `✓ Batch done — ${s.done}/${s.total} ok${failNote}${stopNote} · ` +
         (compareHref
           ? `<a href="${compareHref}" target="_blank" style="color: var(--accent);">open compare.html ↗</a>`
-          : '(no output)');
+          : '(no output)') +
+        folderBtn;
       return;
     }
     const idx = s.total - s.remaining;
@@ -1442,7 +1470,7 @@ $('videoGoBtn')?.addEventListener('click', async () => {
       ...audioRequestBody(),
     });
     const isMp4 = /\.mp4$/i.test(r.file);
-    $('videoStatus').innerHTML = '✓ <a href="/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ', ' + r.frames + ' frames' + (isMp4 ? '' : ' — install ffmpeg for mp4') + ')';
+    $('videoStatus').innerHTML = renderProduced(r.file, `${r.w}×${r.h}, ${r.frames} frames${isMp4 ? '' : ' — install ffmpeg for mp4'}`);
   } catch (e) { $('videoStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
 });

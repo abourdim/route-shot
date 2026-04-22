@@ -916,15 +916,32 @@ const server = http.createServer(async (req, res) => {
 
     // API: open the screenshots folder in the OS file manager
     if (pathname === '/api/open-folder' && req.method === 'POST') {
-      if (!fs.existsSync(SHOTS)) fs.mkdirSync(SHOTS, { recursive: true });
+      // Body may include a relative path to a folder under ROOT (e.g.
+      // 'videos/bit_playground_20260422-191524'). Omitted body = open SHOTS.
+      let target = SHOTS;
+      try {
+        const body = await readBody(req);
+        if (body && typeof body.path === 'string' && body.path) {
+          const abs = safeJoin(ROOT, body.path);
+          if (!abs) return json(res, 400, { error: 'invalid path' });
+          target = abs;
+        }
+      } catch {}
+      if (!fs.existsSync(target)) {
+        // If the target was a file inside a run dir, open its parent instead.
+        const parent = path.dirname(target);
+        if (fs.existsSync(parent)) target = parent;
+        else return json(res, 404, { error: 'not found' });
+      }
+      if (fs.statSync(target).isFile()) target = path.dirname(target);
       const platform = process.platform;
       const cmd = platform === 'win32' ? 'explorer'
                 : platform === 'darwin' ? 'open'
                 : 'xdg-open';
       try {
-        const child = spawn(cmd, [SHOTS], { detached: true, stdio: 'ignore' });
+        const child = spawn(cmd, [target], { detached: true, stdio: 'ignore' });
         child.unref();
-        return json(res, 200, { ok: true, opened: SHOTS });
+        return json(res, 200, { ok: true, opened: target });
       } catch (e) { return json(res, 500, { error: e.message }); }
     }
 
