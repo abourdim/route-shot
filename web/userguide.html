@@ -109,15 +109,24 @@
     <li><a href="#install">Install</a></li>
     <li><a href="#quick">Quick start (CLI)</a></li>
     <li><a href="#menu">Menu</a></li>
-    <li><a href="#config">apps.json</a></li>
-    <li><a href="#fields">All fields</a></li>
+    <li><a href="#config">apps.json structure</a></li>
+    <li><a href="#fields">All fields reference</a></li>
     <li><a href="#examples">Config examples</a></li>
-    <li><a href="#presteps">preSteps</a></li>
+    <li><a href="#presteps">preSteps actions</a></li>
     <li><a href="#recorder">Recorder import</a></li>
-    <li><a href="#blocklist">Blocklist</a></li>
-    <li><a href="#export">Export (promo / gallery / video)</a></li>
+    <li><a href="#blocklist">Blocklist patterns</a></li>
+    <li><a href="#env">Environment variables</a></li>
+    <li><a href="#cli">CLI reference</a></li>
+    <li><a href="#recipes-buttons">Quick recipes (buttons)</a></li>
+    <li><a href="#presets">Presets subsystem</a></li>
+    <li><a href="#manual">Manual session</a></li>
+    <li><a href="#scan">Scan URL</a></li>
+    <li><a href="#variants">Variant filenames</a></li>
+    <li><a href="#audio">Audio (video)</a></li>
+    <li><a href="#styles">32 video styles</a></li>
+    <li><a href="#export">Export panel</a></li>
     <li><a href="#output">Output layout</a></li>
-    <li><a href="#tips">Tips</a></li>
+    <li><a href="#tips">Tips &amp; gotchas</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
     <li><a href="#glossary">Glossary</a></li>
   </ul>
@@ -288,6 +297,247 @@ node src/server.js</code></pre>
   </div>
 
 </div>
+
+<h2 id="env">Environment variables (CLI mode)</h2>
+<p>Every <code>apps.json</code> field has an equivalent env var — useful when running without a config file (single-URL mode) or from CI. Precedence: <strong>apps.json field</strong> &gt; <strong>env var</strong> &gt; <strong>default</strong>.</p>
+
+<table>
+  <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td><code>START_URL</code></td><td>—</td><td>URL to crawl when no positional arg is given</td></tr>
+  <tr><td><code>OUTPUT_DIR</code></td><td><code>screenshots</code></td><td>Root folder for all output</td></tr>
+  <tr><td><code>MAX_PAGES</code></td><td>200</td><td>BFS cap</td></tr>
+  <tr><td><code>NAV_TIMEOUT</code></td><td>15000</td><td>goto timeout (ms)</td></tr>
+  <tr><td><code>INCLUDE_HASH</code></td><td><code>0</code></td><td><code>1</code> = treat <code>#/x</code> vs <code>#/y</code> as distinct pages</td></tr>
+  <tr><td><code>DISMISS_SELECTOR</code></td><td>—</td><td>Selector(s) clicked after each page load</td></tr>
+  <tr><td><code>DISMISS_WAIT</code></td><td>400</td><td>ms after dismiss before continuing</td></tr>
+  <tr><td><code>CLICK_SELECTORS</code></td><td>—</td><td>Comma-separated selectors for explicit clicks</td></tr>
+  <tr><td><code>CLICK_WAIT</code></td><td>500</td><td>ms after each click before screenshot</td></tr>
+  <tr><td><code>CLICK_MODE</code></td><td><code>sequential</code></td><td><code>sequential</code> or <code>independent</code></td></tr>
+  <tr><td><code>AUTO_BUTTONS</code></td><td><code>0</code></td><td><code>1</code> = discover &amp; click every button on the page</td></tr>
+  <tr><td><code>AUTO_BUTTONS_SELECTOR</code></td><td>see code</td><td>Custom discovery selector</td></tr>
+  <tr><td><code>AUTO_BUTTONS_BLOCKLIST</code></td><td>see code</td><td>Regex of button texts to skip (case-insensitive)</td></tr>
+  <tr><td><code>AUTO_BUTTONS_MAX</code></td><td>40</td><td>Per-page safety cap</td></tr>
+  <tr><td><code>MAX_DEPTH</code></td><td>0</td><td>Recursive exploration depth (<code>1</code> = click-then-discover on new state)</td></tr>
+  <tr><td><code>HEADFUL</code></td><td><code>0</code></td><td><code>1</code> = show Chromium window</td></tr>
+  <tr><td><code>DRY_RUN</code></td><td><code>0</code></td><td><code>1</code> = plan only, write <code>plan.json</code>, don't screenshot</td></tr>
+  <tr><td><code>ROUTE_SHOT_ALLOW_EVAL</code></td><td><code>0</code></td><td><code>1</code> = allow <code>evaluate</code> preStep to run arbitrary JS in the page. Leave <strong>off</strong> unless you trust every apps.json you load.</td></tr>
+  <tr><td><code>PORT</code></td><td>8080</td><td>Dashboard port (also <code>node src/server.js 8090</code>)</td></tr>
+</table>
+
+<h2 id="cli">CLI reference</h2>
+
+<h3>Modes</h3>
+<table>
+  <tr><th>Invocation</th><th>What it does</th></tr>
+  <tr><td><code>node route-shot.js</code></td><td>Crawl <code>$START_URL</code> (or <code>http://localhost:3000</code> if unset)</td></tr>
+  <tr><td><code>node route-shot.js &lt;url&gt;</code></td><td>Crawl that URL. Positional arg overrides env var.</td></tr>
+  <tr><td><code>node route-shot.js --batch apps.json</code></td><td>Run every app in the config, one after another, into its own subfolder</td></tr>
+  <tr><td><code>node route-shot.js --preset &lt;name&gt;</code></td><td>Shortcut for <code>--batch presets/&lt;name&gt;.json</code></td></tr>
+  <tr><td><code>node route-shot.js --dry-run --batch apps.json</code></td><td>Write <code>plan.json</code> next to each app listing planned screenshots and clicks, but take none</td></tr>
+  <tr><td><code>node route-shot.js --import-recording flow.json [...]</code></td><td>Convert Chrome DevTools Recorder JSON into an apps.json entry. See <a href="#recorder">§ Recorder import</a>.</td></tr>
+</table>
+
+<h3>Flags</h3>
+<table>
+  <tr><th>Flag</th><th>Value</th><th>Purpose</th></tr>
+  <tr><td><code>--batch</code></td><td>path</td><td>Run all apps in this JSON config</td></tr>
+  <tr><td><code>--preset</code></td><td>name</td><td>Sugar for <code>--batch presets/&lt;name&gt;.json</code></td></tr>
+  <tr><td><code>--dry-run</code> / <code>--dryrun</code></td><td>(flag)</td><td>Plan-only mode. One <code>plan.json</code> per app.</td></tr>
+  <tr><td><code>--import-recording</code></td><td>path</td><td>Source Recorder JSON</td></tr>
+  <tr><td><code>--name</code></td><td>string</td><td>Override imported app name</td></tr>
+  <tr><td><code>--url</code></td><td>url</td><td>Override imported start URL</td></tr>
+  <tr><td><code>--as-clicks</code></td><td>(flag)</td><td>Import clicks as <code>clicks[]</code> variants instead of one-shot <code>preSteps[]</code></td></tr>
+  <tr><td><code>--merge</code></td><td>path</td><td>Upsert into the given apps.json (by name) instead of printing to stdout</td></tr>
+</table>
+
+<h3>Examples</h3>
+<pre><code># simplest: crawl one URL
+node route-shot.js https://example.com
+
+# override batch-size cap via env
+MAX_PAGES=10 node route-shot.js https://blog.example.com
+
+# dry-run a whole batch
+node route-shot.js --dry-run --batch apps.json
+
+# import a recorded login flow as preSteps, merged into apps.json
+node route-shot.js --import-recording login.json \
+  --name "app-behind-login" --merge apps.json
+
+# same recording, but clicks become variant screenshots
+node route-shot.js --import-recording tour.json --as-clicks --merge apps.json
+
+# dashboard on a non-default port
+PORT=8090 node src/server.js</code></pre>
+
+<h2 id="recipes-buttons">Quick recipes (dashboard buttons)</h2>
+<p>Five chips under the app editor apply proven configs in one click. They only <em>mutate the form</em> — press <strong>Save to apps.json</strong> to persist.</p>
+
+<table>
+  <tr><th>Chip</th><th>What it changes</th></tr>
+  <tr><td>Only main page</td><td>Sets <code>maxPages: 1</code>. No BFS — snapshot the landing URL (plus any variants/clicks) only.</td></tr>
+  <tr><td>Dismiss common modals</td><td>If <em>dismiss</em> is empty, sets it to <code>button:has-text("Let's Go"), button:has-text("Got it"), button:has-text("Accept")</code>.</td></tr>
+  <tr><td>Auto-snap every button</td><td>Enables <code>autoButtons: true</code>. If <em>blocklist</em> is empty, seeds the standard safety list (<code>delete|remove|clear|reset|logout|pay|confirm|send</code>).</td></tr>
+  <tr><td>Isolated shots (independent)</td><td>Enables <code>autoButtons</code> + sets <code>clickMode: independent</code> — reloads between every click, so every variant is from a fresh state.</td></tr>
+  <tr><td>Headful debug</td><td>Sets <code>headful: true</code>. Chromium window opens so you can see what's happening.</td></tr>
+</table>
+
+<h2 id="presets">Presets subsystem</h2>
+<p>A <strong>preset</strong> is a saved <code>apps.json</code> under <code>presets/</code>. The dashboard has a picker that lists every file there.</p>
+
+<h3>How to use</h3>
+<ul>
+  <li><strong>Save</strong> — click <em>Save as…</em> in the app editor (or in the Raw JSON &amp; presets accordion), give a name. Writes <code>presets/&lt;name&gt;.json</code>.</li>
+  <li><strong>Load</strong> — pick from the dropdown, click <em>Load</em>. Replaces the current apps.json in the form (not saved yet until you click Save).</li>
+  <li><strong>Auto-load</strong> — check the <em>auto-load</em> box to apply the preset every time you change the dropdown. Great for switching configs fast.</li>
+  <li><strong>CLI</strong> — <code>node route-shot.js --preset &lt;name&gt;</code> runs any preset directly.</li>
+  <li><strong>Delete</strong> — the <em>Delete</em> button removes <code>presets/&lt;name&gt;.json</code> from disk.</li>
+</ul>
+
+<h3>Bundled presets</h3>
+<p>Fourteen presets ship with the repo — <code>bit-playground</code>, <code>debug</code>, <code>docs-site</code>, <code>github-pages-portfolio</code>, <code>hardware-pairing</code>, <code>landing-page</code>, <code>login-flow</code>, <code>minimal</code>, <code>modal-stress</code>, <code>spa-tabs</code>, etc. Browse <code>presets/</code> in the repo for concrete real-world configs.</p>
+
+<h2 id="manual">Manual Snapshot Session</h2>
+<p>The dashboard's third panel opens a <strong>headful</strong> Chromium you drive by hand, with a floating 📸 snap widget injected into every page.</p>
+
+<h3>Purpose</h3>
+<p>Some flows can't be automated: hardware pairing dialogs, payment forms, OTP entry, user testing. Manual session lets you drive the page yourself while still producing deterministic, labelled screenshots.</p>
+
+<h3>How it works</h3>
+<ol>
+  <li>Fill URL + <em>app name</em> (becomes the output subfolder).</li>
+  <li>Click <strong>Start session</strong>. Chromium opens headful.</li>
+  <li>A draggable 📸 widget appears bottom-right of every page the browser visits.</li>
+  <li>Type a label in the optional <em>snapshot label</em> field (persists across reloads via localStorage).</li>
+  <li>Hit <span class="chip">Ctrl+Shift+S</span>, or the widget, or the dashboard's <em>Snapshot</em> button — all three paths queue a snap. The widget is hidden for the frame so it doesn't appear in the screenshot.</li>
+  <li>Click <strong>Stop</strong> to close the browser.</li>
+</ol>
+
+<h3>Behind the scenes</h3>
+<ul>
+  <li>Page-level queue — the widget posts to a queue; Playwright drains it and calls <code>page.screenshot</code>. Avoids same-origin fetch issues (which HTTPS contexts block when calling <code>localhost</code>).</li>
+  <li>CORS is wide-open on <code>/api/manual/snapshot</code> so the widget works on any domain.</li>
+  <li>File naming: <code>manual/&lt;app&gt;_&lt;n&gt;_&lt;label&gt;.png</code>.</li>
+</ul>
+
+<h2 id="scan">Scan URL → Pick buttons</h2>
+<p>Given a URL, Playwright opens it, runs <code>dismiss</code> if set, and enumerates every clickable-looking element.</p>
+
+<h3>Columns</h3>
+<table>
+  <tr><th>Column</th><th>Meaning</th></tr>
+  <tr><td><strong>Tag</strong></td><td><code>button</code>, <code>a</code>, <code>input[type=button]</code>, <code>[role=button]</code></td></tr>
+  <tr><td><strong>Label</strong></td><td>Visible text. Clickable — copies to clipboard.</td></tr>
+  <tr><td><strong>ID</strong></td><td><code>#element-id</code> if set. Clickable — copies.</td></tr>
+  <tr><td><strong>Selector</strong></td><td>Best stable CSS selector. Clickable — copies.</td></tr>
+  <tr><td><strong>Visible</strong></td><td>Hidden elements are dimmed.</td></tr>
+</table>
+
+<h3>Actions</h3>
+<ul>
+  <li><strong>Filter box</strong> — incremental match against label / id / selector.</li>
+  <li><strong>Add to clicks</strong> — appends the selected row's selector to the current app's <code>clicks[]</code>.</li>
+  <li><strong>Add to blocklist</strong> — takes the label text and appends to <code>autoButtonsBlocklist</code>.</li>
+</ul>
+<div class="tip">Use scan to discover selectors, then use <em>Isolated shots</em> recipe for clean variant capture.</div>
+
+<h2 id="variants">Variant filenames — full grammar</h2>
+<pre><code>&lt;pageIdx&gt;_&lt;urlSlug&gt;[__v&lt;variantIdx&gt;[_d&lt;depth&gt;[_&lt;parent&gt;__&lt;child&gt;]]_&lt;label&gt;].png
+
+001_abourdim_github_io_bit_playground.png
+ │   └─ URL with non-word chars → underscores
+ └─ page index in BFS order (zero-padded)
+
+001_abourdim_github_io_bit_playground__v02_Controls.png
+ │                                       │  └─ click label
+ │                                       └─ variant number (01 = main, 02+ = after click)
+
+001_abourdim_github_io_bit_playground__v05_d1_Controls__Sensors.png
+ │                                       │  │  │         └─ leaf click
+ │                                       │  │  └─ ancestor click (depth-0 click that got us here)
+ │                                       │  └─ depth indicator (appears when maxDepth &gt; 0)
+
+001_abourdim_github_io_bit_playground__v12_emoji_a3f9k2.png
+                                              │     └─ 6-char hash of the emoji (for unique filename)
+                                              └─ "emoji_" prefix for emoji-only labels</code></pre>
+<div class="tip">Whitespace, slashes, and funky unicode get squashed to underscores. For pure-emoji buttons route-shot can't safely include in a filename, it hashes the label so two emoji buttons never collide.</div>
+
+<h2 id="audio">Audio (video export)</h2>
+<p>Videos can be rendered silent (default), or muxed with a music bed via ffmpeg.</p>
+
+<h3>Three ways to provide audio</h3>
+<ol>
+  <li><strong>Library</strong> — drop <code>.mp3 / .wav / .m4a / .ogg</code> files into <code>audio/library/</code>. They appear in the dropdown.</li>
+  <li><strong>Uploads</strong> — files placed under <code>audio/uploads/</code> also appear in the dropdown (useful for per-session stuff you don't want to commit).</li>
+  <li><strong>URL</strong> — paste an MP3/WAV URL. route-shot downloads it once into <code>audio/cache/&lt;sha1&gt;.mp3</code> and reuses the cached copy on subsequent renders.</li>
+</ol>
+
+<h3>Controls</h3>
+<table>
+  <tr><th>Field</th><th>Range</th><th>Purpose</th></tr>
+  <tr><td>Volume</td><td>0–100%</td><td>Linear gain (scaled to 0.0–1.0 before passing to ffmpeg)</td></tr>
+  <tr><td>Fade-in</td><td>0–∞ ms</td><td>Silence → full volume ramp at video start</td></tr>
+  <tr><td>Fade-out</td><td>0–∞ ms</td><td>Full volume → silence ramp before video end</td></tr>
+  <tr><td>▶ Preview</td><td>—</td><td>Play the selected file / URL in a floating <code>&lt;audio&gt;</code> element right in the dashboard</td></tr>
+  <tr><td>🔇 Silent (batch)</td><td>checkbox</td><td>Force every batch render to be silent (useful for comparing visual styles without audio dominating)</td></tr>
+</table>
+
+<div class="tip">The audio is <strong>looped</strong> via <code>-stream_loop -1</code>, so a 10-second track covers a 30-second video. Fade-out starts at <code>videoSeconds − fadeOutMs</code>, not at track-end.</div>
+
+<h2 id="styles">Video styles — all 32</h2>
+<p>Four themed groups. Pick one via the dropdown (single render) or multiple via the <em>Test modes</em> card grid (batch render).</p>
+
+<h3>Clean (8)</h3>
+<table>
+  <tr><th>Style</th><th>Feel</th></tr>
+  <tr><td><code>minimal</code></td><td>Fade transitions + Ken-Burns drift. The safe default.</td></tr>
+  <tr><td><code>dynamic</code></td><td>Mix of slide + zoom. Energetic but readable.</td></tr>
+  <tr><td><code>3d</code></td><td>Cube flip + rotate. Tactile.</td></tr>
+  <tr><td><code>cinematic</code></td><td>2.35:1 letterbox bars, serif title. Feels like a trailer.</td></tr>
+  <tr><td><code>documentary</code></td><td>Lower-third banner with caption. Explainer vibe.</td></tr>
+  <tr><td><code>museum</code></td><td>Clean white gallery card. Product-launch polish.</td></tr>
+  <tr><td><code>magazine</code></td><td>Editorial serif + red rule. Print-magazine layout.</td></tr>
+  <tr><td><code>paper</code></td><td>Layered card shadows. Tactile + crafty.</td></tr>
+</table>
+
+<h3>Tech / Dev (8)</h3>
+<table>
+  <tr><th>Style</th><th>Feel</th></tr>
+  <tr><td><code>hacker</code></td><td>Matrix rain, green terminal, glitch. CTF recap.</td></tr>
+  <tr><td><code>maker</code></td><td>PCB grid background, amber accent. Hardware demo.</td></tr>
+  <tr><td><code>anonymous</code></td><td>CRT scanlines + RGB split. Mysterious.</td></tr>
+  <tr><td><code>terminal</code></td><td>Amber tty prompt. Retro unix.</td></tr>
+  <tr><td><code>cyberpunk</code></td><td>Magenta/cyan neon. Night-city feel.</td></tr>
+  <tr><td><code>oscilloscope</code></td><td>CRT grid + sine sweep. Signal processing.</td></tr>
+  <tr><td><code>blueprint</code></td><td>White lines on navy. Engineering drawing.</td></tr>
+  <tr><td><code>neon-outline</code></td><td>Thin glowing wire around each shot.</td></tr>
+</table>
+
+<h3>Space / Science (9)</h3>
+<table>
+  <tr><th>Style</th><th>Feel</th></tr>
+  <tr><td><code>nasa</code></td><td>Mission control HUD overlay.</td></tr>
+  <tr><td><code>cosmos</code></td><td>Starfield + slow drift.</td></tr>
+  <tr><td><code>starfield</code></td><td>Warp speed star streaks.</td></tr>
+  <tr><td><code>nebula</code></td><td>Purple/magenta gas clouds behind shots.</td></tr>
+  <tr><td><code>wormhole</code></td><td>Radial zoom streaks between shots.</td></tr>
+  <tr><td><code>satellite</code></td><td>Telemetry HUD overlay (coords, alt, readings).</td></tr>
+  <tr><td><code>particle</code></td><td>Floating lab dots. Science demo.</td></tr>
+  <tr><td><code>lab-notebook</code></td><td>Engineering grid paper. Field notes.</td></tr>
+  <tr><td><code>radar</code></td><td>Rotating green sweep. Surveillance.</td></tr>
+</table>
+
+<h3>Retro / Art (7)</h3>
+<table>
+  <tr><th>Style</th><th>Feel</th></tr>
+  <tr><td><code>retro-80s</code></td><td>VHS neon. Outrun.</td></tr>
+  <tr><td><code>vhs</code></td><td>Magnetic tape artifacts. Analog horror.</td></tr>
+  <tr><td><code>film-noir</code></td><td>B&amp;W + grain + vignette.</td></tr>
+  <tr><td><code>polaroid</code></td><td>White card + handwritten caption.</td></tr>
+  <tr><td><code>chalkboard</code></td><td>Green chalkboard + chalk rendering.</td></tr>
+  <tr><td><code>comic</code></td><td>Halftone dots + POW! feel.</td></tr>
+  <tr><td><code>holographic</code></td><td>Iridescent shimmer across shots.</td></tr>
+</table>
 
 <h2 id="export">Export (promo / gallery / video)</h2>
 <p>Three share-ready outputs, each in its own tab. All write into a <code>videos/</code> or <code>galleries/</code> run folder stamped with the date.</p>
