@@ -47,6 +47,7 @@ const manual = {
 };
 
 async function manualStop() {
+  if (manual.pollHandle) { clearInterval(manual.pollHandle); manual.pollHandle = null; }
   try { if (manual.context) await manual.context.close(); } catch {}
   try { if (manual.browser) await manual.browser.close(); } catch {}
   manual.browser = manual.context = manual.page = null;
@@ -54,6 +55,41 @@ async function manualStop() {
   manual.count = 0;
 }
 process.on('exit', () => { try { manual.browser?.close(); } catch {} });
+
+// Drain the window.__routeShot.queue the injected widget fills — no network
+// calls from the page to the server, so this works regardless of CORS, mixed
+// content, or sandbox isolation in Playwright chromium.
+async function drainManualQueue() {
+  if (!manual.page) return;
+  let jobs;
+  try {
+    jobs = await manual.page.evaluate(() => {
+      if (!window.__routeShot) return [];
+      const out = window.__routeShot.queue.splice(0, window.__routeShot.queue.length);
+      return out;
+    });
+  } catch { return; }   // page navigating / closed — next tick will retry
+  for (const job of jobs) {
+    try {
+      manual.count++;
+      const outDir = path.join(SHOTS, manual.appName);
+      fs.mkdirSync(outDir, { recursive: true });
+      const labelPart = String(job.label || '').trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
+      const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
+      await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
+      const currentUrl = manual.page.url();
+      const filename = `${manual.appName}/${fname}`;
+      // Post the result back into the page so snap() can resolve.
+      await manual.page.evaluate((r) => {
+        window.__routeShot.results[r.id] = r;
+      }, { id: job.id, ok: true, filename, count: manual.count, url: currentUrl });
+    } catch (e) {
+      try {
+        await manual.page.evaluate((r) => { window.__routeShot.results[r.id] = r; }, { id: job.id, error: e.message });
+      } catch {}
+    }
+  }
+}
 
 // --- run state --------------------------------------------------------------
 const run = {
@@ -414,37 +450,31 @@ const server = http.createServer(async (req, res) => {
         manual.context = await manual.browser.newContext();
         // Inject a floating 📸 widget + Ctrl/Cmd+Shift+S hotkey into every page
         // so the user never has to leave the Chromium window to trigger a snap.
-        const dashboardPort = server.address()?.port || PORT;
         await manual.context.addInitScript({
           content: `
             (function() {
               if (window.top !== window) return;  // only in top frame
-              const PORT = ${dashboardPort};
-              // Try several hosts — IPv4, IPv6, hostname aliases — in case
-              // 'localhost' resolves to a family the server isn't bound on.
-              const HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
-              function tryFetch(host, label) {
-                return fetch('http://' + host + ':' + PORT + '/api/manual/snapshot', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ label: label || '' }),
-                  mode: 'cors',
-                }).then(r => r.json());
-              }
-              function tryImgPing(host, label) {
-                return new Promise((resolve) => {
-                  const img = new Image();
-                  const url = 'http://' + host + ':' + PORT + '/api/manual/snapshot?label=' +
-                              encodeURIComponent(label || '') + '&t=' + Date.now();
-                  img.onload  = () => resolve({ ok: true, filename: '(via image-ping @ ' + host + ')' });
-                  img.onerror = () => resolve(null);
-                  img.src = url;
-                });
-              }
+              // Communication with the dashboard is via window-level flags —
+              // Playwright's page.evaluate() polls these server-side, so we
+              // bypass all network-level CORS / mixed-content / Windows firewall
+              // / Playwright-sandbox issues that block http fetches from this
+              // page to http://localhost.
+              window.__routeShot = window.__routeShot || { queue: [], results: {}, seq: 0 };
               async function snap(label) {
-                for (const h of HOSTS) { try { return await tryFetch(h, label); } catch {} }
-                for (const h of HOSTS) { const r = await tryImgPing(h, label); if (r) return r; }
-                return { error: 'dashboard unreachable — tried ' + HOSTS.map(h => h + ':' + PORT).join(', ') };
+                const id = ++window.__routeShot.seq;
+                window.__routeShot.queue.push({ id, label: label || '' });
+                return await new Promise((resolve) => {
+                  const start = Date.now();
+                  (function poll() {
+                    if (window.__routeShot.results[id]) {
+                      const r = window.__routeShot.results[id];
+                      delete window.__routeShot.results[id];
+                      return resolve(r);
+                    }
+                    if (Date.now() - start > 5000) return resolve({ error: 'timeout waiting for dashboard' });
+                    setTimeout(poll, 100);
+                  })();
+                });
               }
               function flash(msg, ok) {
                 const b = document.createElement('div');
@@ -494,6 +524,8 @@ const server = http.createServer(async (req, res) => {
         manual.url     = body.url;
         manual.appName = (body.appName || 'manual').replace(/[^\w.-]/g, '_');
         manual.count   = 0;
+        // Poll the page's queue of snap requests every 150ms.
+        manual.pollHandle = setInterval(drainManualQueue, 150);
         await manual.page.goto(body.url, { waitUntil: 'networkidle', timeout: 20000 });
         if (body.dismiss) {
           for (const sel of String(body.dismiss).split(',').map((s) => s.trim()).filter(Boolean)) {
