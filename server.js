@@ -226,6 +226,21 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`route-shot dashboard  →  http://localhost:${PORT}`);
-});
+// Try PORT; if busy, step up through the next 20 ports. Prints the final
+// chosen port so launchers can discover it via stdout.
+function listenWithFallback(startPort, attempt = 0) {
+  const p = startPort + attempt;
+  server.once('error', (e) => {
+    if (e.code === 'EADDRINUSE' && attempt < 20) {
+      console.error(`port ${p} in use, trying ${p + 1}`);
+      listenWithFallback(startPort, attempt + 1);
+    } else {
+      console.error(`failed to start: ${e.message}`);
+      process.exit(1);
+    }
+  });
+  server.listen(p, () => {
+    console.log(`route-shot dashboard  →  http://localhost:${p}`);
+  });
+}
+listenWithFallback(PORT);

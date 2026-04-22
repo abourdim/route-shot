@@ -197,17 +197,22 @@ cmd_dashboard() {
         local pid=$!
         echo "$pid" > "$SCRIPT_DIR/.dashboard.pid"
         disown "$pid" 2>/dev/null || true
-        # wait up to 4 seconds for the server to start listening
-        local i=0
-        while [ $i -lt 20 ]; do
-            if curl -s -m 1 "http://localhost:$port/api/status" >/dev/null 2>&1; then break; fi
+        # wait up to 6 seconds for the server to print its chosen port
+        local i=0 chosen=""
+        while [ $i -lt 30 ]; do
+            chosen=$(grep -oE 'http://localhost:[0-9]+' "$SCRIPT_DIR/.dashboard.log" 2>/dev/null | tail -1 | sed 's|.*:||')
+            [ -n "$chosen" ] && break
             sleep 0.2
             i=$((i + 1))
         done
-        if ! curl -s -m 1 "http://localhost:$port/api/status" >/dev/null 2>&1; then
+        if [ -z "$chosen" ]; then
             printf "${R}Dashboard failed to start.${NC} See %s/.dashboard.log\n\n" "$SCRIPT_DIR"
             tail -20 "$SCRIPT_DIR/.dashboard.log" 2>/dev/null
             return 1
+        fi
+        if [ "$chosen" != "$port" ]; then
+            printf "${Y}Port %s was busy — using %s instead.${NC}\n" "$port" "$chosen"
+            port="$chosen"
         fi
     fi
 
