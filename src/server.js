@@ -421,12 +421,23 @@ const server = http.createServer(async (req, res) => {
               if (window.top !== window) return;  // only in top frame
               const API = 'http://localhost:${dashboardPort}/api/manual/snapshot';
               function snap(label) {
+                // 1. Try fetch (CORS + Private Network Access). Returns JSON on success.
                 return fetch(API, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ label: label || '' }),
                   mode: 'cors',
-                }).then(r => r.json()).catch(e => ({ error: e.message }));
+                }).then(r => r.json()).catch((e) => {
+                  // 2. Fallback: image-ping GET with ?label=... — bypasses CORS entirely.
+                  //    Fire-and-forget: the browser loads the 1x1 GIF response.
+                  return new Promise((resolve) => {
+                    const img = new Image();
+                    const url = API + '?label=' + encodeURIComponent(label || '') + '&t=' + Date.now();
+                    img.onload  = () => resolve({ ok: true, filename: '(via image-ping)' });
+                    img.onerror = () => resolve({ error: 'fetch + image-ping both failed (dashboard running? port?)' });
+                    img.src = url;
+                  });
+                });
               }
               function flash(msg, ok) {
                 const b = document.createElement('div');
@@ -486,24 +497,38 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { await manualStop(); return json(res, 500, { error: e.message }); }
     }
 
-    if (pathname === '/api/manual/snapshot' && (req.method === 'POST' || req.method === 'OPTIONS')) {
-      // CORS — injected widget runs on the target page's origin
-      res.setHeader('Access-Control-Allow-Origin',  '*');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (pathname === '/api/manual/snapshot' && (req.method === 'POST' || req.method === 'OPTIONS' || req.method === 'GET')) {
+      // CORS + Private Network Access (Chrome blocks HTTPS-origin → http://localhost
+      // without this extra header). Widget runs on github.io/any origin.
+      res.setHeader('Access-Control-Allow-Origin',          '*');
+      res.setHeader('Access-Control-Allow-Methods',         'POST, GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers',         'Content-Type');
+      res.setHeader('Access-Control-Allow-Private-Network', 'true');
+      res.setHeader('Access-Control-Max-Age',               '86400');
       if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
       if (!manual.page) return json(res, 400, { error: 'no manual session — start one first' });
-      const body = await readBody(req);
+      const labelRaw = req.method === 'GET'
+        ? (u.searchParams.get('label') || '')
+        : (((await readBody(req)) || {}).label || '');
       try {
         manual.count++;
         const outDir = path.join(SHOTS, manual.appName);
         fs.mkdirSync(outDir, { recursive: true });
-        const labelPart = (body.label || '').trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
+        const labelPart = String(labelRaw).trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
         const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
         await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
         const currentUrl = manual.page.url();
+        // GET fallback (image-ping) expects a tiny response — serve a 1x1 GIF
+        if (req.method === 'GET') {
+          const gif = Buffer.from('R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==', 'base64');
+          res.writeHead(200, { 'Content-Type': 'image/gif', 'Content-Length': gif.length });
+          return res.end(gif);
+        }
         return json(res, 200, { ok: true, filename: `${manual.appName}/${fname}`, count: manual.count, url: currentUrl });
-      } catch (e) { return json(res, 500, { error: e.message }); }
+      } catch (e) {
+        if (req.method === 'GET') { res.writeHead(500); return res.end(); }
+        return json(res, 500, { error: e.message });
+      }
     }
 
     if (pathname === '/api/manual/stop' && req.method === 'POST') {
