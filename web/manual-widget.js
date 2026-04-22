@@ -60,6 +60,21 @@
     el.addEventListener('mousedown', (ev) => {
       if (ev.target.closest('.__rs-anno-bar')) return;
       if (ev.target.classList && ev.target.classList.contains('__rs-handle')) return;
+      // For contentEditable areas: skip the drag only when the click is
+      // actually over the text glyphs (so caret placement works). Padding /
+      // margin around the text still drags. We compute the text's union
+      // bounding box via Range.selectNodeContents and compare to clientX/Y.
+      const ce = ev.target.closest('[contenteditable="true"]');
+      if (ce) {
+        try {
+          const r = document.createRange();
+          r.selectNodeContents(ce);
+          const box = r.getBoundingClientRect();
+          const inText = ev.clientX >= box.left && ev.clientX <= box.right
+                      && ev.clientY >= box.top  && ev.clientY <= box.bottom;
+          if (inText && box.width > 0 && box.height > 0) return;
+        } catch {}
+      }
       const rect = el.getBoundingClientRect();
       const dx = ev.clientX - rect.left, dy = ev.clientY - rect.top;
       const onMove = (e) => {
@@ -75,6 +90,87 @@
       document.addEventListener('mouseup', onUp, true);
       ev.preventDefault();
     });
+  }
+
+  // 8-way resize handles (corners + edges). Lives outside el so handles
+  // aren't clipped by overflow:hidden or border-radius. Caller controls
+  // when to show/hide via return.show()/hide(); placement auto-tracks the
+  // element via ResizeObserver + drag-bar + window listeners.
+  function addResizeHandles(el) {
+    const dirs = [
+      ['nw', 'nwse-resize',  1, 1, 1, 1],
+      ['n',  'ns-resize',    0, 1, 0, 1],
+      ['ne', 'nesw-resize', -1, 1, 1, 1],
+      ['e',  'ew-resize',   -1, 0, 1, 0],
+      ['se', 'nwse-resize', -1,-1, 1, 1],
+      ['s',  'ns-resize',    0,-1, 0, 1],
+      ['sw', 'nesw-resize',  1,-1, 1, 1],
+      ['w',  'ew-resize',    1, 0, 1, 0],
+    ];
+    const handles = [];
+    dirs.forEach(([d, cur, mx, my, rx, ry]) => {
+      const h = document.createElement('div');
+      h.className = '__rs-handle __rs-resize-' + d;
+      h.style.cssText = 'position:fixed;width:12px;height:12px;background:#58a6ff;' +
+        'border:2px solid #fff;border-radius:50%;box-sizing:border-box;z-index:2147483647;' +
+        'cursor:' + cur + ';display:none;box-shadow:0 1px 3px rgba(0,0,0,0.5);';
+      h.dataset.dir = d;
+      h.__rsMult = { mx, my, rx, ry };
+      document.documentElement.appendChild(h);
+      handles.push(h);
+    });
+    function place() {
+      const r = el.getBoundingClientRect();
+      const put = (h, x, y) => {
+        h.style.left = (x - 6) + 'px';
+        h.style.top  = (y - 6) + 'px';
+      };
+      put(handles[0], r.left,         r.top);
+      put(handles[1], r.left + r.width/2, r.top);
+      put(handles[2], r.right,        r.top);
+      put(handles[3], r.right,        r.top + r.height/2);
+      put(handles[4], r.right,        r.bottom);
+      put(handles[5], r.left + r.width/2, r.bottom);
+      put(handles[6], r.left,         r.bottom);
+      put(handles[7], r.left,         r.top + r.height/2);
+    }
+    handles.forEach((h) => {
+      h.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation(); ev.preventDefault();
+        const startRect = el.getBoundingClientRect();
+        const { mx, my, rx, ry } = h.__rsMult;
+        const sx = ev.clientX, sy = ev.clientY;
+        const onMv = (e) => {
+          const dx = e.clientX - sx, dy = e.clientY - sy;
+          if (rx) {
+            const newW = Math.max(20, startRect.width - mx * dx);
+            el.style.width = newW + 'px';
+            if (mx > 0) el.style.left = (startRect.left + dx) + 'px';
+          }
+          if (ry) {
+            const newH = Math.max(20, startRect.height - my * dy);
+            el.style.height = newH + 'px';
+            if (my > 0) el.style.top = (startRect.top + dy) + 'px';
+          }
+          place();
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMv, true);
+          document.removeEventListener('mouseup', onUp, true);
+        };
+        document.addEventListener('mousemove', onMv, true);
+        document.addEventListener('mouseup', onUp, true);
+      });
+    });
+    try { new ResizeObserver(() => { if (handles[0].style.display === 'block') place(); }).observe(el); } catch {}
+    window.addEventListener('scroll', () => { if (handles[0].style.display === 'block') place(); }, true);
+    window.addEventListener('resize', () => { if (handles[0].style.display === 'block') place(); });
+    return {
+      show: () => { place(); handles.forEach((h) => h.style.display = 'block'); },
+      hide: () => { handles.forEach((h) => h.style.display = 'none'); },
+      destroy: () => { handles.forEach((h) => h.remove()); },
+      place,
+    };
   }
 
   // Shared per-item toolbar: color / (stroke) / opacity / extra / delete.
@@ -105,13 +201,56 @@
     opIn.oninput = () => { el.style.opacity = opIn.value; };
     const opLbl = document.createElement('label'); opLbl.textContent = 'α'; opLbl.style.opacity = '0.7';
     bar.appendChild(opLbl); bar.appendChild(opIn);
+    // Optional text block: text color + font size + bg color. Applied to
+    // opts.textEl (defaults to el). Keeps every text-bearing annotation
+    // fully styleable without bespoke per-type controls.
+    if (opts.text) {
+      const textEl = opts.textEl || el;
+      function rgbToHex(rgb) {
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb || '');
+        if (!m) return '#ffffff';
+        return '#' + [1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, '0')).join('');
+      }
+      const tcLbl = document.createElement('label'); tcLbl.textContent = 'T'; tcLbl.style.opacity = '0.7';
+      const tc = document.createElement('input'); tc.type = 'color';
+      tc.value = rgbToHex(getComputedStyle(textEl).color);
+      tc.style.cssText = 'width:24px;height:20px;border:0;background:none;padding:0;';
+      tc.title = 'text color';
+      // Apply on the element *and* all descendants — contentEditable editing
+      // can wrap text in <div>/<font>/<span> with its own color/size, which
+      // would otherwise shadow the parent's inline style.
+      function setOnAll(prop, val) {
+        textEl.style.setProperty(prop, val, 'important');
+        textEl.querySelectorAll('*').forEach((c) => c.style.setProperty(prop, val, 'important'));
+      }
+      // Bind both input + change so Chromium builds that only fire `change`
+      // on OS-dialog close still apply.
+      const setTextColor = () => setOnAll('color', tc.value);
+      tc.oninput = setTextColor; tc.onchange = setTextColor;
+      const fsLbl = document.createElement('label'); fsLbl.textContent = 'T size'; fsLbl.style.opacity = '0.7';
+      const fs = document.createElement('input'); fs.type = 'range';
+      fs.min = '8'; fs.max = '80'; fs.step = '1';
+      fs.value = String(parseInt(getComputedStyle(textEl).fontSize) || 14);
+      fs.style.width = '60px'; fs.title = 'font size';
+      fs.oninput = () => setOnAll('font-size', fs.value + 'px');
+      const bgLbl = document.createElement('label'); bgLbl.textContent = 'bg'; bgLbl.style.opacity = '0.7';
+      const bg = document.createElement('input'); bg.type = 'color';
+      // .backgroundColor always returns rgb()/rgba() form; .background is a
+      // shorthand that may be empty or include image layers we can't parse.
+      bg.value = rgbToHex(getComputedStyle(el).backgroundColor);
+      bg.style.cssText = 'width:24px;height:20px;border:0;background:none;padding:0;';
+      bg.title = 'background color';
+      const setBg = () => el.style.setProperty('background', bg.value, 'important');
+      bg.oninput = setBg; bg.onchange = setBg;
+      [tcLbl, tc, fsLbl, fs, bgLbl, bg].forEach((x) => bar.appendChild(x));
+    }
     // Universal scale — layered onto whatever transform the element already
     // has (rotate, etc). transform-origin:top left so scaling doesn't shift
     // the element off its anchor point.
     if (!opts.noScale) {
       const scLbl = document.createElement('label'); scLbl.textContent = 'size'; scLbl.style.opacity = '0.7';
       const scIn = document.createElement('input'); scIn.type = 'range';
-      scIn.min = '0.2'; scIn.max = '4'; scIn.step = '0.05';
+      scIn.min = '0.2'; scIn.max = '10'; scIn.step = '0.05';
       scIn.value = el.dataset.__rsScale || '1'; scIn.style.width = '70px'; scIn.title = 'scale';
       el.style.transformOrigin = 'top left';
       scIn.oninput = () => {
@@ -134,12 +273,19 @@
       bar.style.left = Math.max(4, r.left) + 'px';
       bar.style.top  = Math.max(4, r.top - 40) + 'px';
     }
+    // Optional 8-way resize handles around the element.
+    const handles = opts.handles ? addResizeHandles(el) : null;
     el.addEventListener('click', (ev) => {
       if (ev.target.classList && ev.target.classList.contains('__rs-handle')) return;
       place(); bar.style.display = 'flex';
+      if (handles) handles.show();
     });
     document.addEventListener('mousedown', (ev) => {
-      if (!el.contains(ev.target) && !bar.contains(ev.target)) bar.style.display = 'none';
+      const insideHandle = ev.target.classList && ev.target.classList.contains('__rs-handle');
+      if (!el.contains(ev.target) && !bar.contains(ev.target) && !insideHandle) {
+        bar.style.display = 'none';
+        if (handles) handles.hide();
+      }
     }, true);
     try { new ResizeObserver(() => { if (bar.style.display !== 'none') place(); }).observe(el); } catch {}
     window.addEventListener('scroll', () => { if (bar.style.display !== 'none') place(); }, true);
@@ -349,6 +495,7 @@
       { name: '📏 Measure', key: 'measure', items: [] },
       { name: '🔌 Maker',   key: 'maker',   items: [] },
       { name: '🖼 Frame',   key: 'frame',   items: [] },
+      { name: '📷 Cam',     key: 'cam',     items: [] },
     ];
     const catBy = {}; categories.forEach((c) => (catBy[c.key] = c));
     function register(key, icon, title, fn) { catBy[key].items.push({ icon, title, fn }); }
@@ -385,9 +532,9 @@
       const S = window.__routeShot.annoStyle;
       b.style.cssText = 'position:fixed;left:40%;top:40%;width:200px;height:120px;z-index:2147483645;' +
         'border:' + S.stroke + 'px solid ' + S.color + ';' +
-        'box-sizing:border-box;cursor:move;resize:both;overflow:auto;border-radius:' + radius + ';';
+        'box-sizing:border-box;cursor:move;overflow:hidden;border-radius:' + radius + ';';
       const apply = () => { b.style.border = S.stroke + 'px solid ' + S.color; };
-      makeDraggable(b); attachAnnoBar(b, apply);
+      makeDraggable(b); attachAnnoBar(b, apply, { handles: true });
       document.documentElement.appendChild(b);
       return b;
     }
@@ -403,7 +550,7 @@
         'background:rgba(255,235,59,0.45);cursor:move;resize:both;overflow:auto;border-radius:2px;mix-blend-mode:multiply;';
       makeDraggable(h);
       attachAnnoBar(h, () => {}, {
-        noStroke: true, noColor: true,
+        noStroke: true, noColor: true, handles: true,
         extra: (bar) => {
           const c = document.createElement('input'); c.type = 'color'; c.value = '#ffeb3b';
           c.style.cssText = 'width:24px;height:20px;border:0;background:none;padding:0;';
@@ -424,7 +571,7 @@
       const apply = () => {};
       makeDraggable(sp);
       attachAnnoBar(sp, apply, {
-        noColor: true, noStroke: true,
+        noColor: true, noStroke: true, handles: true,
         extra: (bar) => {
           const dim = document.createElement('input'); dim.type = 'range';
           dim.min = '0'; dim.max = '0.95'; dim.step = '0.05'; dim.value = '0.65';
@@ -704,7 +851,7 @@
         txt.style.background = window.__routeShot.annoStyle.color;
         tail.style.borderLeftColor = window.__routeShot.annoStyle.color;
       }
-      makeDraggable(wrap); attachAnnoBar(wrap, apply, { noStroke: true });
+      makeDraggable(wrap); attachAnnoBar(wrap, apply, { noStroke: true, text: true, textEl: txt });
       document.documentElement.appendChild(wrap);
     });
 
@@ -712,23 +859,20 @@
     register('mark', '①', 'numbered badge', () => {
       window.__routeShot.annoCount++;
       const n = document.createElement('div');
+      n.contentEditable = 'true';
       n.textContent = String(window.__routeShot.annoCount);
       const S = window.__routeShot.annoStyle;
       n.style.cssText = 'position:fixed;left:40%;top:40%;width:36px;height:36px;z-index:2147483645;' +
         'border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;' +
-        'font:bold 18px/1 system-ui;cursor:move;box-shadow:0 2px 6px rgba(0,0,0,0.4);' +
+        'font:bold 18px/1 system-ui;cursor:move;box-shadow:0 2px 6px rgba(0,0,0,0.4);outline:none;' +
         'background:' + S.color + ';user-select:none;';
       const apply = () => { n.style.background = window.__routeShot.annoStyle.color; };
       makeDraggable(n); attachAnnoBar(n, apply, {
-        noStroke: true,
+        noStroke: true, text: true,
         extra: (bar) => {
           const sz = document.createElement('input'); sz.type = 'range'; sz.min = '20'; sz.max = '120';
-          sz.value = '36'; sz.style.width = '70px'; sz.title = 'size';
-          sz.oninput = () => {
-            const v = Number(sz.value);
-            n.style.width = v + 'px'; n.style.height = v + 'px';
-            n.style.fontSize = Math.round(v * 0.5) + 'px';
-          };
+          sz.value = '36'; sz.style.width = '70px'; sz.title = 'disc size';
+          sz.oninput = () => { const v = Number(sz.value); n.style.width = v + 'px'; n.style.height = v + 'px'; };
           bar.appendChild(sz);
         },
       });
@@ -746,11 +890,17 @@
         s.style.color = window.__routeShot.annoStyle.color;
         s.style.borderColor = window.__routeShot.annoStyle.color;
       };
+      s.contentEditable = 'true'; s.style.outline = 'none';
       makeDraggable(s); attachAnnoBar(s, apply, {
+        text: true,
         extra: (bar) => {
           const rot = document.createElement('input'); rot.type = 'range'; rot.min = '-45'; rot.max = '45';
           rot.value = '-12'; rot.style.width = '60px'; rot.title = 'rotate';
-          rot.oninput = () => { s.style.transform = 'rotate(' + rot.value + 'deg)'; };
+          rot.oninput = () => {
+            const sc = s.dataset.__rsScale || '1';
+            s.dataset.__rsBaseTransform = 'rotate(' + rot.value + 'deg)';
+            s.style.transform = 'rotate(' + rot.value + 'deg) scale(' + sc + ')';
+          };
           bar.appendChild(rot);
         },
       });
@@ -763,28 +913,24 @@
       el.textContent = e;
       el.style.cssText = 'position:fixed;left:45%;top:45%;z-index:2147483645;font:36px/1 system-ui;' +
         'cursor:move;user-select:none;';
+      el.contentEditable = 'true'; el.style.outline = 'none';
       const apply = () => {};
       makeDraggable(el); attachAnnoBar(el, apply, {
-        noColor: true, noStroke: true,
-        extra: (bar) => {
-          const sz = document.createElement('input'); sz.type = 'range'; sz.min = '16'; sz.max = '120';
-          sz.value = '36'; sz.style.width = '70px'; sz.title = 'size';
-          sz.oninput = () => { el.style.fontSize = sz.value + 'px'; };
-          bar.appendChild(sz);
-        },
+        noColor: true, noStroke: true, text: true,
       });
       document.documentElement.appendChild(el);
     });
 
     function spawnIcon(glyph, color) {
       const el = document.createElement('div');
+      el.contentEditable = 'true';
       el.textContent = glyph;
       el.style.cssText = 'position:fixed;left:45%;top:45%;width:48px;height:48px;z-index:2147483645;' +
-        'border-radius:50%;display:flex;align-items:center;justify-content:center;' +
+        'border-radius:50%;display:flex;align-items:center;justify-content:center;outline:none;' +
         'font:bold 28px/1 system-ui;cursor:move;user-select:none;color:#fff;background:' + color + ';' +
         'box-shadow:0 2px 6px rgba(0,0,0,0.4);';
       const apply = () => { el.style.background = window.__routeShot.annoStyle.color; };
-      makeDraggable(el); attachAnnoBar(el, apply, { noStroke: true });
+      makeDraggable(el); attachAnnoBar(el, apply, { noStroke: true, text: true });
       document.documentElement.appendChild(el);
     }
     register('mark', '✓', 'check (do this)', () => spawnIcon('✓', '#2e7d32'));
@@ -799,16 +945,9 @@
         'background:#fafafa;color:#222;font:bold 14px/1 "SF Mono", Menlo, Consolas, monospace;' +
         'border:1px solid #bbb;border-bottom:3px solid #999;border-radius:5px;cursor:move;' +
         'box-shadow:0 1px 0 rgba(0,0,0,0.1);user-select:none;';
+      k.contentEditable = 'true'; k.style.outline = 'none';
       const apply = () => {};
-      makeDraggable(k); attachAnnoBar(k, apply, {
-        noColor: true, noStroke: true,
-        extra: (bar) => {
-          const ed = document.createElement('button'); ed.textContent = '✎'; ed.title = 'edit text';
-          ed.style.cssText = 'padding:2px 8px;border:0;background:#444;color:#fff;border-radius:4px;cursor:pointer;';
-          ed.onclick = () => { const v = prompt('Key label:', k.textContent); if (v) k.textContent = v; };
-          bar.appendChild(ed);
-        },
-      });
+      makeDraggable(k); attachAnnoBar(k, apply, { noColor: true, noStroke: true, text: true });
       document.documentElement.appendChild(k);
     });
 
@@ -836,7 +975,9 @@
           else c.style.background = col;
         });
       }
-      makeDraggable(r); attachAnnoBar(r, apply, { noStroke: true });
+      makeDraggable(r); attachAnnoBar(r, apply, {
+        noStroke: true, text: true, textEl: r.firstChild,  // sample from first dot
+      });
       document.documentElement.appendChild(r);
     });
 
@@ -982,7 +1123,7 @@
         'background:' + bg + ';color:' + fg + ';border-radius:999px;font:bold 12px/1.6 "SF Mono", Consolas, monospace;' +
         'cursor:move;user-select:none;outline:none;letter-spacing:0.02em;box-shadow:0 1px 3px rgba(0,0,0,0.3);';
       const apply = () => { el.style.background = window.__routeShot.annoStyle.color; };
-      makeDraggable(el); attachAnnoBar(el, apply, { noStroke: true });
+      makeDraggable(el); attachAnnoBar(el, apply, { noStroke: true, text: true });
       document.documentElement.appendChild(el);
     }
     register('maker', 'P0', 'pin label pill', () => {
@@ -1112,7 +1253,7 @@
         '<div>🟡 1× LED</div>' +
         '<div>🟢 2× 10kΩ resistor</div>';
       makeDraggable(box);
-      attachAnnoBar(box, () => {}, { noColor: true, noStroke: true });
+      attachAnnoBar(box, () => {}, { noColor: true, noStroke: true, text: true });
       document.documentElement.appendChild(box);
     });
 
@@ -1176,7 +1317,7 @@
         box.style.borderColor = window.__routeShot.annoStyle.color;
         line.setAttribute('stroke', window.__routeShot.annoStyle.color);
         handle.setAttribute('fill', window.__routeShot.annoStyle.color);
-      }, { noStroke: true });
+      }, { noStroke: true, text: true });
       redraw();
       // Kill on box delete — piggyback the bar's × by observing mutation
       new MutationObserver(() => { if (!document.contains(box)) svg.remove(); }).observe(document.documentElement, { childList: true, subtree: true });
@@ -1193,15 +1334,15 @@
       const apply = () => {};
       makeDraggable(el);
       attachAnnoBar(el, apply, {
-        noStroke: true, noColor: true,
+        noStroke: true, noColor: true, text: true,
         extra: (bar) => {
-          const c = document.createElement('input'); c.type = 'color'; c.value = '#fff59d';
-          c.style.cssText = 'width:24px;height:20px;border:0;background:none;padding:0;';
-          c.oninput = () => { el.style.background = c.value; };
           const rot = document.createElement('input'); rot.type = 'range'; rot.min = '-10'; rot.max = '10';
           rot.value = '-2'; rot.style.width = '60px'; rot.title = 'rotate';
-          rot.oninput = () => { el.style.transform = 'rotate(' + rot.value + 'deg)'; };
-          bar.insertBefore(c, bar.firstChild);
+          rot.oninput = () => {
+            const sc = el.dataset.__rsScale || '1';
+            el.dataset.__rsBaseTransform = 'rotate(' + rot.value + 'deg)';
+            el.style.transform = 'rotate(' + rot.value + 'deg) scale(' + sc + ')';
+          };
           bar.appendChild(rot);
         },
       });
@@ -1217,7 +1358,7 @@
         'border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.5);cursor:move;outline:none;white-space:pre;' +
         'border:1px solid #333;resize:both;overflow:auto;';
       makeDraggable(el);
-      attachAnnoBar(el, () => {}, { noColor: true, noStroke: true });
+      attachAnnoBar(el, () => {}, { noColor: true, noStroke: true, text: true });
       document.documentElement.appendChild(el);
     });
 
@@ -1262,7 +1403,7 @@
         '<span style="width:12px;height:12px;border-radius:50%;background:#ff5f56;"></span>' +
         '<span style="width:12px;height:12px;border-radius:50%;background:#ffbd2e;"></span>' +
         '<span style="width:12px;height:12px;border-radius:50%;background:#27c93f;"></span></div>';
-      makeDraggable(el); attachAnnoBar(el, () => {}, { noColor: true, noStroke: true });
+      makeDraggable(el); attachAnnoBar(el, () => {}, { noColor: true, noStroke: true, handles: true });
       document.documentElement.appendChild(el);
     });
 
@@ -1271,7 +1412,7 @@
       el.style.cssText = 'position:fixed;left:40%;top:10%;width:260px;height:540px;z-index:2147483644;' +
         'border:12px solid #222;border-radius:32px;cursor:move;box-shadow:0 12px 40px rgba(0,0,0,0.5);' +
         'background:transparent;resize:both;overflow:auto;box-sizing:content-box;';
-      makeDraggable(el); attachAnnoBar(el, () => {}, { noColor: true, noStroke: true });
+      makeDraggable(el); attachAnnoBar(el, () => {}, { noColor: true, noStroke: true, handles: true });
       document.documentElement.appendChild(el);
     });
 
@@ -1282,6 +1423,169 @@
         'box-shadow:0 12px 40px rgba(0,0,0,0.5);resize:both;overflow:auto;box-sizing:border-box;';
       makeDraggable(el); attachAnnoBar(el, () => {}, { noColor: true, noStroke: true });
       document.documentElement.appendChild(el);
+    });
+
+    // --- CAM: webcam overlays (as many as you have cameras) ---------------
+    register('cam', '📷', 'add webcam overlay', async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('navigator.mediaDevices.getUserMedia is unavailable on this page.\n' +
+              'The page must be served over https or localhost (secure context).');
+        return;
+      }
+      let devices = [];
+      let primeError = null;
+      try {
+        // Prime permissions: getUserMedia must succeed at least once before
+        // labels show up in enumerateDevices().
+        const prime = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        prime.getTracks().forEach((t) => t.stop());
+      } catch (e) {
+        primeError = e;
+        console.error('[route-shot] camera prime failed:', e);
+      }
+      try {
+        devices = (await navigator.mediaDevices.enumerateDevices())
+          .filter((d) => d.kind === 'videoinput');
+      } catch (e) { console.error('[route-shot] enumerateDevices failed:', e); }
+      if (primeError && !devices.length) {
+        // Full failure — spell out the likely causes so the user can act.
+        alert('Camera could not be started.\n\n' +
+              'Error: ' + (primeError.name || '') + ' — ' + (primeError.message || primeError) + '\n\n' +
+              'Common causes on Windows:\n' +
+              '  • Settings → Privacy & security → Camera: disabled for desktop apps\n' +
+              '  • Another app (Teams / Zoom / OBS) is holding the camera\n' +
+              '  • No camera is attached or drivers are missing\n\n' +
+              'DevTools console (F12) has the full error.');
+        return;
+      }
+      if (!devices.length) { alert('No cameras found on this system.'); return; }
+
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;left:60%;top:60%;width:220px;height:165px;z-index:2147483645;' +
+        'border-radius:12px;overflow:hidden;cursor:move;resize:both;box-shadow:0 6px 20px rgba(0,0,0,0.5);' +
+        'background:#000;';
+      const video = document.createElement('video');
+      video.autoplay = true; video.playsInline = true; video.muted = true;
+      video.style.cssText = 'width:100%;height:100%;object-fit:cover;pointer-events:none;display:block;';
+      wrap.appendChild(video);
+      document.documentElement.appendChild(wrap);
+
+      let currentStream = null;
+      async function useDevice(id) {
+        if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+        try {
+          const s = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: id ? { exact: id } : undefined, width: 1280, height: 720 },
+            audio: false,
+          });
+          video.srcObject = s; currentStream = s;
+        } catch (e) { flash('cam: ' + e.message, false); }
+      }
+      await useDevice(devices[0].deviceId);
+
+      makeDraggable(wrap);
+      attachAnnoBar(wrap, () => {}, {
+        noColor: true, noStroke: true, handles: true,
+        extra: (bar) => {
+          // Device selector.
+          const pick = document.createElement('select');
+          pick.style.cssText = 'background:#222;color:#fff;border:1px solid #444;border-radius:4px;padding:2px 4px;max-width:140px;';
+          devices.forEach((d, i) => {
+            const o = document.createElement('option'); o.value = d.deviceId;
+            o.textContent = d.label || ('camera ' + (i + 1));
+            pick.appendChild(o);
+          });
+          pick.onchange = () => useDevice(pick.value);
+          bar.appendChild(pick);
+          // Shape toggle (round <-> rect).
+          const shape = document.createElement('button'); shape.type = 'button';
+          shape.textContent = '○'; shape.title = 'round / rect';
+          shape.style.cssText = 'padding:2px 8px;border:0;background:#444;color:#fff;border-radius:4px;cursor:pointer;';
+          shape.onclick = () => {
+            const isRound = wrap.style.borderRadius === '50%';
+            wrap.style.borderRadius = isRound ? '12px' : '50%';
+            shape.textContent = isRound ? '○' : '▭';
+          };
+          bar.appendChild(shape);
+          // Mirror toggle (selfie flip).
+          const mir = document.createElement('button'); mir.type = 'button';
+          mir.textContent = '↔'; mir.title = 'mirror (selfie flip)';
+          mir.style.cssText = 'padding:2px 8px;border:0;background:#444;color:#fff;border-radius:4px;cursor:pointer;';
+          mir.onclick = () => {
+            video.style.transform = video.style.transform ? '' : 'scaleX(-1)';
+          };
+          bar.appendChild(mir);
+        },
+      });
+
+      // Stop camera on × — attachAnnoBar removes the DOM node but we also
+      // need to release the track or the light stays on.
+      new MutationObserver(() => {
+        if (!document.contains(wrap) && currentStream) {
+          currentStream.getTracks().forEach((t) => t.stop());
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    });
+
+    register('cam', '🖥', 'add window/screen capture', async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('navigator.mediaDevices.getDisplayMedia is unavailable.\nMust be served over https or localhost.');
+        return;
+      }
+      let stream;
+      try {
+        // getDisplayMedia ALWAYS prompts the user to pick a screen/window/tab —
+        // it can't be pre-granted (intentional Chrome security constraint).
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      } catch (e) {
+        if (e.name !== 'NotAllowedError') alert('Screen capture failed: ' + (e.message || e.name));
+        return;
+      }
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;left:20%;top:20%;width:480px;height:300px;z-index:2147483645;' +
+        'border-radius:8px;overflow:hidden;cursor:move;box-shadow:0 6px 24px rgba(0,0,0,0.6);' +
+        'background:#000;border:2px solid #555;';
+      const video = document.createElement('video');
+      video.autoplay = true; video.playsInline = true; video.muted = true;
+      video.style.cssText = 'width:100%;height:100%;object-fit:contain;pointer-events:none;display:block;';
+      video.srcObject = stream;
+      wrap.appendChild(video);
+      document.documentElement.appendChild(wrap);
+      // Auto-remove when the user clicks "Stop sharing" in Chrome's UI.
+      stream.getVideoTracks()[0].addEventListener('ended', () => {
+        wrap.remove();
+        flash('screen share ended', true);
+      });
+      makeDraggable(wrap);
+      attachAnnoBar(wrap, () => {}, {
+        noColor: true, noStroke: true, handles: true,
+        extra: (bar) => {
+          const fit = document.createElement('button'); fit.type = 'button';
+          fit.textContent = 'fit'; fit.title = 'contain / cover';
+          fit.style.cssText = 'padding:2px 8px;border:0;background:#444;color:#fff;border-radius:4px;cursor:pointer;';
+          fit.onclick = () => {
+            video.style.objectFit = video.style.objectFit === 'cover' ? 'contain' : 'cover';
+            fit.textContent = video.style.objectFit;
+          };
+          bar.appendChild(fit);
+          const re = document.createElement('button'); re.type = 'button';
+          re.textContent = '⟳'; re.title = 'pick a different source';
+          re.style.cssText = 'padding:2px 8px;border:0;background:#444;color:#fff;border-radius:4px;cursor:pointer;';
+          re.onclick = async () => {
+            try {
+              const s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+              stream.getTracks().forEach((t) => t.stop());
+              stream = s;
+              video.srcObject = s;
+              s.getVideoTracks()[0].addEventListener('ended', () => { wrap.remove(); flash('screen share ended', true); });
+            } catch {}
+          };
+          bar.appendChild(re);
+        },
+      });
+      new MutationObserver(() => {
+        if (!document.contains(wrap)) stream.getTracks().forEach((t) => t.stop());
+      }).observe(document.documentElement, { childList: true, subtree: true });
     });
 
     // --- assemble widget ----------------------------------------------------

@@ -544,6 +544,9 @@ const server = http.createServer(async (req, res) => {
           args: ['--start-maximized', '--new-window'],
         });
         manual.context = await manual.browser.newContext({ viewport: null });
+        // Pre-grant camera + mic so the webcam-overlay annotation can
+        // start streaming without a permission prompt interrupting the flow.
+        try { await manual.context.grantPermissions(['camera', 'microphone']); } catch {}
         // Inject a floating 📸 widget + Ctrl/Cmd+Shift+S hotkey into every page
         // so the user never has to leave the Chromium window to trigger a snap.
         await manual.context.addInitScript({ path: path.join(ROOT, 'web', 'manual-widget.js') });
