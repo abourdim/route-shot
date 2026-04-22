@@ -15,8 +15,19 @@
     --danger-bg: #2a1416; --danger-border: #6a2a2f;
   }
   * { box-sizing: border-box; }
+  :root {
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 22px; --sp-6: 32px; --sp-7: 48px;
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-pill: 999px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
+    --shadow-md: 0 4px 14px rgba(0,0,0,0.35);
+    --shadow-accent: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
   html, body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--ink); }
   header { padding: 14px 24px; border-bottom: 1px solid var(--border);
     display: flex; gap: 12px; align-items: center;
     position: sticky; top: 0; z-index: 50; background: var(--bg);
@@ -80,16 +91,24 @@
   /* ── Canvas: one view at a time ── */
   main { padding: 28px 32px 48px; max-width: 1500px; margin: 0 auto; width: 100%; }
   main > [data-view] { display: none; }
-  main > [data-view].active { display: block; }
+  main > [data-view].active { display: block; animation: viewFadeIn .28s var(--ease); }
+  @keyframes viewFadeIn {
+    0%   { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
   /* Run view keeps Run + App editor side-by-side since they're workflow-linked */
   main > [data-view="run"].active { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
   @media (max-width: 1100px) {
     main > [data-view="run"].active { grid-template-columns: 1fr; }
   }
   .panel { background: var(--panel); border: 1px solid var(--border);
-    border-radius: 8px; padding: 18px 22px; }
-  .panel h2 { margin: 0 0 14px; font-size: 14px; color: var(--accent);
-    text-transform: uppercase; letter-spacing: 0.5px; }
+    border-radius: var(--r-lg); padding: 22px 26px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .2s var(--ease);
+  }
+  .panel:focus-within { box-shadow: var(--shadow-md); }
+  .panel h2 { margin: 0 0 var(--sp-4); font-size: 13px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
   /* ── Workshop-DIY theme system (ported from /tools/ template) ── */
   :root { --font-h: 'Righteous', 'Tajawal', sans-serif; }
   /* Default = mosque-gold */
@@ -252,12 +271,16 @@
     text-transform: none; letter-spacing: 0; }
   .row { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
   button, .btn { background: var(--bg); color: var(--ink); border: 1px solid var(--border);
-    padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px;
-    transition: background .12s, border-color .12s, color .12s; }
-  button:hover { border-color: var(--accent); }
+    padding: 8px 14px; border-radius: var(--r-md); cursor: pointer; font-size: 13px;
+    font-weight: 500; font-family: inherit;
+    transition: all .15s var(--ease); }
+  button:hover { border-color: var(--accent); transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  button:focus-visible { outline: none; box-shadow: var(--shadow-accent); }
   button.primary { background: var(--accent); color: #000; border-color: var(--accent);
-    font-weight: 600; }
-  button.primary:hover { filter: brightness(1.1); }
+    font-weight: 600; box-shadow: var(--shadow-sm); }
+  button.primary:hover { filter: brightness(1.1); transform: translateY(-1px);
+    box-shadow: var(--shadow-md); }
   button.ghost { color: var(--mute); }
   button.ghost:hover { color: var(--ink); border-color: var(--mute); }
   /* Quick-recipes row — looks subtler so Save/Run stand out */
@@ -275,11 +298,17 @@
   button.danger:hover { background: var(--bad); color: #fff; border-color: var(--bad); }
   .btn-spacer { flex: 1 1 auto; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
-  input[type=text], textarea {
+  input[type=text], input[type=number], input[type=url], textarea, select {
     background: var(--code-bg); border: 1px solid var(--border); color: var(--ink);
-    padding: 6px 10px; border-radius: 4px; font: 13px/1.4 "Cascadia Mono", Consolas, monospace;
-    width: 100%;
+    padding: 9px 12px; border-radius: var(--r-md); font: 13px/1.4 "Cascadia Mono", Consolas, monospace;
+    width: 100%; transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
   }
+  input:hover, textarea:hover, select:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+  input:focus, textarea:focus, select:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: var(--shadow-accent);
+  }
+  input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute) 80%, transparent); }
   textarea { resize: vertical; min-height: 280px; white-space: pre; tab-size: 2; }
   .logs { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
     padding: 10px; font: 12px/1.4 "Cascadia Mono", Consolas, monospace;
