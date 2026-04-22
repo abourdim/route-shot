@@ -336,6 +336,76 @@
     </div>
   </details>
 
+  <details class="panel-collapse" style="grid-column: 1 / -1;">
+    <summary>
+      <span>🎁 Export — promo / gallery / PDF / video</span>
+      <span class="summary-tag muted">social-ready</span>
+    </summary>
+    <div class="panel-body">
+      <p class="muted" style="font-size: 12px; margin: 6px 0 10px;">
+        Render share-ready assets from your screenshots. Promo PNGs for Twitter/IG/YouTube, a self-contained gallery HTML, a PDF handout, and a slideshow MP4 for Reels/Feed.
+      </p>
+
+      <h3 style="margin: 8px 0 4px; font-size: 14px;">Promo PNG</h3>
+      <div class="row">
+        <select id="promoShot" style="flex: 2;"><option value="">(pick a screenshot)</option></select>
+        <select id="promoFormat">
+          <option value="twitter">Twitter 1200×675</option>
+          <option value="ig-square">IG square 1080×1080</option>
+          <option value="ig-story">IG/TikTok story 1080×1920</option>
+          <option value="youtube">YouTube 1280×720</option>
+          <option value="og">Open Graph 1200×630</option>
+          <option value="ph-gallery">Product Hunt 1270×760</option>
+        </select>
+        <select id="promoFrame">
+          <option value="browser">browser chrome</option>
+          <option value="laptop">laptop</option>
+          <option value="phone">phone</option>
+          <option value="none">no frame</option>
+        </select>
+      </div>
+      <div class="row">
+        <input type="text" id="promoTitle" placeholder="Title (e.g. micro:bit Playground)" style="flex: 1;">
+        <input type="text" id="promoTagline" placeholder="Tagline / subtitle" style="flex: 1;">
+      </div>
+      <div class="row">
+        <input type="text" id="promoCta" placeholder="CTA (e.g. Try it free)">
+        <label class="muted" style="display:flex; align-items:center; gap:4px;">theme
+          <select id="promoTheme"><option value="dark">dark</option><option value="light">light</option></select>
+        </label>
+        <label class="muted" style="display:flex; align-items:center; gap:4px;">accent
+          <input type="color" id="promoAccent" value="#58a6ff" style="width: 40px; height: 24px; padding: 0; border: 0; background: none;">
+        </label>
+        <button id="promoGoBtn" class="primary">Render PNG</button>
+      </div>
+      <div id="promoStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+
+      <h3 style="margin: 14px 0 4px; font-size: 14px;">Gallery HTML + PDF</h3>
+      <div class="row">
+        <select id="exportApp" style="flex: 1;"><option value="">(pick an app folder)</option></select>
+        <input type="text" id="exportTitle" placeholder="Gallery title (optional)" style="flex: 1;">
+        <button id="galleryGoBtn" class="primary">Build gallery.html</button>
+        <button id="pdfGoBtn">Export PDF</button>
+      </div>
+      <div id="galleryStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+
+      <h3 style="margin: 14px 0 4px; font-size: 14px;">Slideshow video (Reel / Feed / YouTube)</h3>
+      <div class="row">
+        <select id="videoApp" style="flex: 1;"><option value="">(pick an app folder)</option></select>
+        <select id="videoFormat">
+          <option value="reel">Reel / Story 1080×1920</option>
+          <option value="square">Square 1080×1080</option>
+          <option value="feed">Feed 1920×1080</option>
+          <option value="youtube">YouTube 1920×1080</option>
+        </select>
+        <input type="number" id="videoFrameMs" value="2500" min="500" max="10000" step="100" style="width: 90px;" title="ms per frame">
+        <input type="text" id="videoWatermark" placeholder="watermark (optional)" style="flex: 1;">
+        <button id="videoGoBtn" class="primary">Render video</button>
+      </div>
+      <div id="videoStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+    </div>
+  </details>
+
   <section class="panel" style="grid-column: 1 / -1;">
     <h2>Screenshots <span class="muted" id="shotCount"></span></h2>
     <div id="indexes"></div>
@@ -757,7 +827,107 @@ async function loadGallery() {
     };
     g.appendChild(card);
   });
+  populateExportPickers();
 }
+
+// --- Export panel ----------------------------------------------------------
+function populateExportPickers() {
+  const shotSel = $('promoShot');
+  const appSelE = $('exportApp');
+  const appSelV = $('videoApp');
+  if (!shotSel || !appSelE || !appSelV) return;
+  const prevShot = shotSel.value, prevAppE = appSelE.value, prevAppV = appSelV.value;
+  shotSel.innerHTML = '<option value="">(pick a screenshot)</option>';
+  galleryFiles.forEach((f) => {
+    const o = document.createElement('option'); o.value = f; o.textContent = f;
+    shotSel.appendChild(o);
+  });
+  if (galleryFiles.includes(prevShot)) shotSel.value = prevShot;
+  // Apps = top-level folders under screenshots/ (inferred from file paths).
+  const apps = [...new Set(galleryFiles.map((f) => f.split('/')[0]))].sort();
+  [appSelE, appSelV].forEach((sel, i) => {
+    const prev = i === 0 ? prevAppE : prevAppV;
+    sel.innerHTML = '<option value="">(pick an app folder)</option>';
+    apps.forEach((a) => {
+      const o = document.createElement('option'); o.value = a; o.textContent = a;
+      sel.appendChild(o);
+    });
+    if (apps.includes(prev)) sel.value = prev;
+  });
+}
+
+async function postJson(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+
+$('promoGoBtn')?.addEventListener('click', async () => {
+  const shot = $('promoShot').value;
+  if (!shot) { alert('Pick a screenshot first.'); return; }
+  const btn = $('promoGoBtn'); btn.disabled = true;
+  $('promoStatus').textContent = 'Rendering…';
+  try {
+    const r = await postJson('/api/export/promo', {
+      shot,
+      format:  $('promoFormat').value,
+      title:   $('promoTitle').value,
+      tagline: $('promoTagline').value,
+      cta:     $('promoCta').value,
+      frame:   $('promoFrame').value,
+      theme:   $('promoTheme').value,
+      accent:  $('promoAccent').value,
+    });
+    $('promoStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ')';
+    loadGallery();
+  } catch (e) { $('promoStatus').textContent = '✗ ' + e.message; }
+  finally { btn.disabled = false; }
+});
+
+$('galleryGoBtn')?.addEventListener('click', async () => {
+  const app = $('exportApp').value;
+  if (!app) { alert('Pick an app folder first.'); return; }
+  const btn = $('galleryGoBtn'); btn.disabled = true;
+  $('galleryStatus').textContent = 'Building…';
+  try {
+    const r = await postJson('/api/export/gallery', { app, title: $('exportTitle').value });
+    $('galleryStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> — ' + r.count + ' slide(s)';
+  } catch (e) { $('galleryStatus').textContent = '✗ ' + e.message; }
+  finally { btn.disabled = false; }
+});
+
+$('pdfGoBtn')?.addEventListener('click', async () => {
+  const app = $('exportApp').value;
+  if (!app) { alert('Pick an app folder first.'); return; }
+  const btn = $('pdfGoBtn'); btn.disabled = true;
+  $('galleryStatus').textContent = 'Printing PDF (building gallery if needed)…';
+  try {
+    // Ensure gallery.html exists before printing.
+    await postJson('/api/export/gallery', { app, title: $('exportTitle').value });
+    const r = await postJson('/api/export/pdf', { app });
+    $('galleryStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a>';
+  } catch (e) { $('galleryStatus').textContent = '✗ ' + e.message; }
+  finally { btn.disabled = false; }
+});
+
+$('videoGoBtn')?.addEventListener('click', async () => {
+  const app = $('videoApp').value;
+  if (!app) { alert('Pick an app folder first.'); return; }
+  const btn = $('videoGoBtn'); btn.disabled = true;
+  $('videoStatus').textContent = 'Recording video — this may take a minute…';
+  try {
+    const r = await postJson('/api/export/video', {
+      app,
+      format:    $('videoFormat').value,
+      frameMs:   Number($('videoFrameMs').value) || 2500,
+      watermark: $('videoWatermark').value,
+    });
+    const isMp4 = /\.mp4$/i.test(r.file);
+    $('videoStatus').innerHTML = '✓ <a href="/screenshots/' + encodeURI(r.file) + '" target="_blank" style="color: var(--accent);">' + r.file + '</a> (' + r.w + '×' + r.h + ', ' + r.frames + ' frames' + (isMp4 ? '' : ' — install ffmpeg for mp4') + ')';
+  } catch (e) { $('videoStatus').textContent = '✗ ' + e.message; }
+  finally { btn.disabled = false; }
+});
 
 function openLightbox(i) {
   if (i < 0 || i >= galleryFiles.length) return;

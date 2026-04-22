@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>route-shot promo renderer</title>
+<!--
+  Rendered by the dashboard via Playwright at an exact viewport size to
+  produce PNG promo assets for social platforms. Params via query string:
+    ?img=<url>&title=<t>&tagline=<t>&cta=<t>&frame=<phone|laptop|browser|none>
+    &theme=<dark|light>&accent=<#hex>&logo=<url>
+  Intended to be screenshot-grabbed with `fullPage:false` at the requested
+  platform dimensions — see server.js /api/export/promo.
+-->
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #f0f6fc;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+  }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, sans-serif; }
+  .stage { width: 100vw; height: 100vh; position: relative; display: flex; flex-direction: column; }
+  .hdr {
+    padding: clamp(16px, 3vw, 40px); display: flex; flex-direction: column;
+    gap: 6px; flex: 0 0 auto;
+  }
+  .logo { height: clamp(24px, 4vw, 48px); width: auto; }
+  .title { font-size: clamp(28px, 5.5vw, 64px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.08; margin: 0; }
+  .tagline { font-size: clamp(14px, 2.2vw, 24px); color: var(--muted); margin: 0; line-height: 1.35; max-width: 80%; }
+  .shot-wrap {
+    flex: 1 1 auto; position: relative; display: flex; align-items: center; justify-content: center;
+    padding: clamp(12px, 2vw, 32px); min-height: 0;
+  }
+  .shot-frame { position: relative; max-width: 92%; max-height: 100%; box-sizing: border-box; }
+  .shot-frame img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
+  /* device frames */
+  .frame-browser { background: #1c1f24; padding: 32px 8px 8px 8px; border-radius: 8px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55); position: relative; }
+  .frame-browser::before {
+    content: ""; position: absolute; top: 10px; left: 12px; width: 12px; height: 12px;
+    border-radius: 50%; background: #ff5f56; box-shadow: 20px 0 0 #ffbd2e, 40px 0 0 #27c93f;
+  }
+  .frame-laptop { background: #2a2f37; padding: 12px 12px 22px 12px; border-radius: 10px 10px 24px 24px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55); }
+  .frame-phone { background: #111; padding: 16px; border-radius: 36px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55); max-width: 60%; }
+  .frame-phone img { border-radius: 22px; }
+  .cta {
+    position: absolute; bottom: clamp(16px, 3vw, 40px); right: clamp(16px, 3vw, 40px);
+    padding: clamp(10px, 1.6vw, 18px) clamp(18px, 2.8vw, 32px);
+    background: var(--accent); color: #000; font-weight: 700; border-radius: 999px;
+    font-size: clamp(14px, 2vw, 22px); letter-spacing: 0.02em;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .credits {
+    position: absolute; bottom: clamp(12px, 2vw, 24px); left: clamp(16px, 3vw, 40px);
+    color: var(--muted); font-size: clamp(10px, 1.3vw, 14px); letter-spacing: 0.04em;
+  }
+  /* story / reel — vertical layout adjustments */
+  .vertical .shot-frame { max-width: 94%; max-height: 62vh; }
+  .vertical .title { font-size: clamp(36px, 7vw, 72px); }
+  .vertical .cta { bottom: clamp(40px, 6vh, 100px); right: 50%; transform: translateX(50%); }
+  .light { --bg: #f8fafc; --fg: #0d1117; --muted: #64748b; }
+  .light .frame-browser, .light .frame-laptop, .light .frame-phone { background: #e2e8f0; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="hdr">
+    <img id="logo" class="logo" style="display:none">
+    <h1 id="title" class="title"></h1>
+    <p id="tagline" class="tagline"></p>
+  </div>
+  <div class="shot-wrap">
+    <div id="shotFrame" class="shot-frame"><img id="shot" alt=""></div>
+  </div>
+  <div id="cta" class="cta" style="display:none"></div>
+  <div id="credits" class="credits"></div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const stage = document.getElementById('stage');
+  const shotFrame = document.getElementById('shotFrame');
+  const shot = document.getElementById('shot');
+  document.getElementById('title').textContent   = q.get('title') || '';
+  document.getElementById('tagline').textContent = q.get('tagline') || '';
+  const cta = document.getElementById('cta');
+  const ctaText = q.get('cta');
+  if (ctaText) { cta.textContent = ctaText; cta.style.display = 'block'; }
+  document.getElementById('credits').textContent = q.get('credits') || '';
+  const logo = q.get('logo');
+  if (logo) {
+    const l = document.getElementById('logo');
+    l.src = logo; l.style.display = 'block';
+  }
+  shot.src = q.get('img') || '';
+  const frame = q.get('frame') || 'browser';
+  if (frame !== 'none') shotFrame.classList.add('frame-' + frame);
+  if (q.get('theme') === 'light') document.body.classList.add('light');
+  const accent = q.get('accent');
+  if (accent) document.documentElement.style.setProperty('--accent', accent);
+  // Vertical layout for story / reel sizes (detected by aspect < 1).
+  if (window.innerHeight > window.innerWidth) stage.classList.add('vertical');
+  // Signal ready to the dashboard: it waits for window.__promoReady === true
+  // before grabbing the screenshot so the image has fully decoded.
+  (async () => {
+    if (shot.src) { try { await shot.decode(); } catch {} }
+    window.__promoReady = true;
+  })();
+</script>
+</body>
+</html>

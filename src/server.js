@@ -18,6 +18,23 @@ const SHOTS    = path.join(ROOT, 'screenshots');
 const HISTORY  = path.join(ROOT, '.history.json');
 const HISTORY_CAP = 50;
 const PRESETS_DIR = path.join(ROOT, 'presets');
+const EXPORTS_SUBDIR = 'exports';
+
+// Social media canvas presets — width × height at 1× (actual pixels).
+const PROMO_FORMATS = {
+  twitter:   { w: 1200, h:  675 },   // Twitter/X card, LinkedIn post
+  'ig-square': { w: 1080, h: 1080 }, // Instagram feed
+  'ig-story':  { w: 1080, h: 1920 }, // Instagram/TikTok story + reel
+  youtube:   { w: 1280, h:  720 },   // YouTube thumbnail
+  og:        { w: 1200, h:  630 },   // Open Graph / Facebook share
+  'ph-gallery': { w: 1270, h: 760 }, // Product Hunt gallery
+};
+const VIDEO_FORMATS = {
+  reel:    { w: 1080, h: 1920 },
+  square:  { w: 1080, h: 1080 },
+  feed:    { w: 1920, h: 1080 },
+  youtube: { w: 1920, h: 1080 },
+};
 
 function loadHistory() {
   try { return JSON.parse(fs.readFileSync(HISTORY, 'utf8')); }
@@ -283,6 +300,135 @@ function rmrf(dir) {
   }
 }
 
+// Build a self-contained gallery.html — every image inlined as base64 so
+// the file can be dropped anywhere (USB, email, GitHub Pages) and still work
+// offline. Keyboard nav (arrows, space, F), click-to-zoom, thumbnail rail.
+function buildGalleryHtml(title, slides) {
+  const safe = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+  const slidesJson = JSON.stringify(slides);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>${safe(title)} — gallery</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0d1117; color: #f0f6fc;
+    font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
+  body.print { overflow: visible; }
+  header { display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; border-bottom: 1px solid #30363d; background: #161b22; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .meta { color: #8b949e; font-size: 13px; }
+  main { display: grid; grid-template-rows: 1fr 100px; height: calc(100vh - 54px); }
+  .stage { position: relative; display: flex; align-items: center; justify-content: center;
+    padding: 24px; overflow: hidden; }
+  .stage img { max-width: 94%; max-height: 94%; object-fit: contain; border-radius: 6px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5); background: #000; cursor: zoom-in; }
+  .caption { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center;
+    font-size: 18px; font-weight: 600; padding: 6px 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.7); }
+  .note { position: absolute; left: 20px; top: 20px; max-width: 40%;
+    font-size: 12px; color: #8b949e; background: rgba(0,0,0,0.4); padding: 6px 10px; border-radius: 4px; }
+  .rail { display: flex; gap: 6px; overflow-x: auto; padding: 10px; border-top: 1px solid #30363d; background: #161b22; }
+  .rail img { height: 80px; width: auto; border-radius: 3px; opacity: 0.55; cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s; flex: 0 0 auto; }
+  .rail img.active { opacity: 1; outline: 2px solid #58a6ff; }
+  .rail img:hover { opacity: 0.9; }
+  .hint { position: fixed; right: 12px; bottom: 120px; font-size: 11px; color: #8b949e;
+    background: rgba(0,0,0,0.6); padding: 6px 10px; border-radius: 4px; pointer-events: none; }
+  /* Print / PDF layout: one slide per page. */
+  @media print {
+    html, body { overflow: visible; height: auto; background: white; color: black; }
+    header, .rail, .hint { display: none !important; }
+    main { display: block !important; height: auto; }
+    .stage { page-break-after: always; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; width: 100vw; height: 100vh; padding: 20px; }
+    .stage img { max-height: 85vh; max-width: 90vw; box-shadow: none; background: transparent; }
+    .caption { position: static; color: #222; text-shadow: none; margin-top: 12px; }
+    .note { position: static; color: #555; background: transparent; margin-top: 4px; max-width: none; }
+  }
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: none;
+    align-items: center; justify-content: center; z-index: 100; }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 96vw; max-height: 96vh; }
+</style>
+</head><body>
+<header>
+  <h1>${safe(title)}</h1>
+  <div class="meta"><span id="idx">1</span> / ${slides.length} · ← → space · F fullscreen</div>
+</header>
+<main id="main">
+  <div class="stage">
+    <img id="shot" alt="">
+    <div id="note" class="note"></div>
+    <div id="cap" class="caption"></div>
+  </div>
+  <div class="rail" id="rail"></div>
+</main>
+<div class="hint">← / → navigate · space play · F fullscreen · Esc exit</div>
+<div id="lb" class="lightbox"><img id="lbImg"></div>
+<script>
+const slides = ${slidesJson};
+const rail = document.getElementById('rail');
+const shot = document.getElementById('shot');
+const cap  = document.getElementById('cap');
+const note = document.getElementById('note');
+const idx  = document.getElementById('idx');
+let i = 0, playing = false, playTimer = null;
+// Print mode: emit every slide inline, one per page, so @media print paginates.
+if (new URLSearchParams(location.search).get('print') === '1') {
+  document.body.classList.add('print');
+  const m = document.getElementById('main'); m.innerHTML = '';
+  slides.forEach((s) => {
+    const d = document.createElement('div'); d.className = 'stage';
+    d.innerHTML = '<img src="' + s.src + '"><div class="caption">' + (s.caption || s.name) + '</div>' +
+      (s.note ? '<div class="note">' + s.note + '</div>' : '');
+    m.appendChild(d);
+  });
+} else {
+  slides.forEach((s, ii) => {
+    const t = document.createElement('img');
+    t.src = s.src; t.title = s.name;
+    t.onclick = () => show(ii);
+    rail.appendChild(t);
+  });
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    const s = slides[i];
+    shot.src = s.src;
+    cap.textContent = s.caption || s.name;
+    note.textContent = s.note || '';
+    idx.textContent = i + 1;
+    [...rail.children].forEach((t, tt) => t.classList.toggle('active', tt === i));
+    const active = rail.children[i];
+    if (active) active.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }
+  show(0);
+  shot.onclick = () => { document.getElementById('lbImg').src = shot.src; document.getElementById('lb').classList.add('show'); };
+  document.getElementById('lb').onclick = () => document.getElementById('lb').classList.remove('show');
+  function togglePlay() {
+    playing = !playing;
+    if (playing) playTimer = setInterval(() => { show((i + 1) % slides.length); }, 2500);
+    else { clearInterval(playTimer); playTimer = null; }
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') show(i + 1);
+    else if (e.key === 'ArrowLeft') show(i - 1);
+    else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    else if (e.key.toLowerCase() === 'f') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } else if (e.key === 'Escape') {
+      document.getElementById('lb').classList.remove('show');
+      if (playing) togglePlay();
+    }
+  });
+}
+</script>
+</body></html>`;
+}
+
 function listShots() {
   if (!fs.existsSync(SHOTS)) return [];
   const out = [];
@@ -348,6 +494,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/userguide.html') {
       return serveFile(res, path.join(WEB, 'userguide.html'));
     }
+    if (pathname === '/promo.html')     return serveFile(res, path.join(WEB, 'promo.html'));
+    if (pathname === '/slideshow.html') return serveFile(res, path.join(WEB, 'slideshow.html'));
 
     // static: screenshots
     if (pathname.startsWith('/screenshots/')) {
@@ -711,6 +859,178 @@ const server = http.createServer(async (req, res) => {
         else json(res, 500, { error: err || out, code });
       });
       return;
+    }
+
+    // --- EXPORTS: promo / gallery / pdf / video -----------------------------
+
+    // POST /api/export/promo
+    // body: { shot: "app/file.png", format, title, tagline, cta, frame, theme, accent, logo, credits }
+    // Renders web/promo.html at the chosen social format size, grabs a PNG.
+    if (pathname === '/api/export/promo' && req.method === 'POST') {
+      const body = await readBody(req);
+      const fmt = PROMO_FORMATS[body.format] || PROMO_FORMATS.twitter;
+      const shotAbs = safeJoin(SHOTS, body.shot || '');
+      if (!shotAbs || !fs.existsSync(shotAbs)) return json(res, 400, { error: 'shot not found' });
+      const app = (body.shot || '').split(/[\\/]/)[0] || 'manual';
+      const outDir = path.join(SHOTS, app, EXPORTS_SUBDIR);
+      fs.mkdirSync(outDir, { recursive: true });
+      const base = path.basename(body.shot).replace(/\.[^.]+$/, '');
+      const outFile = `promo-${body.format}-${base}.png`;
+      const outPath = path.join(outDir, outFile);
+      try {
+        const { chromium } = require('playwright');
+        const browser = await chromium.launch();
+        const ctx = await browser.newContext({ viewport: { width: fmt.w, height: fmt.h }, deviceScaleFactor: 1 });
+        const page = await ctx.newPage();
+        const q = new URLSearchParams({
+          img: '/screenshots/' + body.shot.replace(/\\/g, '/'),
+          title:   body.title   || '',
+          tagline: body.tagline || '',
+          cta:     body.cta     || '',
+          frame:   body.frame   || 'browser',
+          theme:   body.theme   || 'dark',
+          accent:  body.accent  || '#58a6ff',
+          logo:    body.logo    || '',
+          credits: body.credits || '',
+        });
+        await page.goto(`http://localhost:${PORT}/promo.html?${q.toString()}`, { waitUntil: 'networkidle' });
+        await page.waitForFunction('window.__promoReady === true', null, { timeout: 15000 });
+        await page.screenshot({ path: outPath, type: 'png' });
+        await browser.close();
+        return json(res, 200, { ok: true, file: `${app}/${EXPORTS_SUBDIR}/${outFile}`, w: fmt.w, h: fmt.h });
+      } catch (e) { return json(res, 500, { error: e.message }); }
+    }
+
+    // POST /api/export/gallery  body: { app, title }
+    // Builds a self-contained gallery.html (all screenshots inlined as base64).
+    if (pathname === '/api/export/gallery' && req.method === 'POST') {
+      const body = await readBody(req);
+      const app = String(body.app || '').replace(/[^\w.-]/g, '');
+      if (!app) return json(res, 400, { error: 'app required' });
+      const dir = path.join(SHOTS, app);
+      if (!fs.existsSync(dir)) return json(res, 404, { error: 'app folder not found' });
+      const files = fs.readdirSync(dir).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort();
+      if (!files.length) return json(res, 400, { error: 'no screenshots to export' });
+      const slides = files.map((f) => {
+        const b64 = fs.readFileSync(path.join(dir, f)).toString('base64');
+        const mime = /\.png$/i.test(f) ? 'image/png' : 'image/jpeg';
+        let meta = {};
+        const sidecar = path.join(dir, f.replace(/\.[^.]+$/, '.json'));
+        if (fs.existsSync(sidecar)) {
+          try { meta = JSON.parse(fs.readFileSync(sidecar, 'utf8')); } catch {}
+        }
+        return { name: f, src: `data:${mime};base64,${b64}`, caption: meta.caption || '', note: meta.note || '', url: meta.url || '' };
+      });
+      const title = body.title || app;
+      const html = buildGalleryHtml(title, slides);
+      const outPath = path.join(dir, 'gallery.html');
+      fs.writeFileSync(outPath, html);
+      return json(res, 200, { ok: true, file: `${app}/gallery.html`, count: slides.length });
+    }
+
+    // POST /api/export/pdf  body: { app }  — requires gallery.html to exist (or regenerates).
+    if (pathname === '/api/export/pdf' && req.method === 'POST') {
+      const body = await readBody(req);
+      const app = String(body.app || '').replace(/[^\w.-]/g, '');
+      if (!app) return json(res, 400, { error: 'app required' });
+      const galleryAbs = path.join(SHOTS, app, 'gallery.html');
+      if (!fs.existsSync(galleryAbs)) return json(res, 400, { error: 'gallery.html not found — export gallery first' });
+      const outFile = `gallery-${app}.pdf`;
+      const outPath = path.join(SHOTS, app, outFile);
+      try {
+        const { chromium } = require('playwright');
+        const browser = await chromium.launch();
+        const ctx = await browser.newContext();
+        const page = await ctx.newPage();
+        await page.goto(`http://localhost:${PORT}/screenshots/${encodeURIComponent(app)}/gallery.html?print=1`, { waitUntil: 'networkidle' });
+        await page.pdf({ path: outPath, format: 'Letter', printBackground: true, landscape: true, margin: { top: '0.3in', bottom: '0.3in', left: '0.3in', right: '0.3in' } });
+        await browser.close();
+        return json(res, 200, { ok: true, file: `${app}/${outFile}` });
+      } catch (e) { return json(res, 500, { error: 'PDF export failed: ' + e.message }); }
+    }
+
+    // POST /api/export/video
+    // body: { app, format: 'reel'|'square'|'feed'|'youtube', frameMs, fps, watermark }
+    // Renders web/slideshow.html in Playwright at the chosen size and records
+    // it via MediaRecorder. If ffmpeg is on PATH, auto-transcodes to mp4.
+    if (pathname === '/api/export/video' && req.method === 'POST') {
+      const body = await readBody(req);
+      const fmt = VIDEO_FORMATS[body.format] || VIDEO_FORMATS.reel;
+      const app = String(body.app || '').replace(/[^\w.-]/g, '');
+      if (!app) return json(res, 400, { error: 'app required' });
+      const dir = path.join(SHOTS, app);
+      if (!fs.existsSync(dir)) return json(res, 404, { error: 'app folder not found' });
+      const files = fs.readdirSync(dir).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort();
+      if (!files.length) return json(res, 400, { error: 'no screenshots to export' });
+      const frameMs = Number(body.frameMs || 2500);
+      const fps = Number(body.fps || 30);
+      const cfg = {
+        fps,
+        watermark: body.watermark || '',
+        frames: files.map((f) => {
+          let meta = {};
+          const sidecar = path.join(dir, f.replace(/\.[^.]+$/, '.json'));
+          if (fs.existsSync(sidecar)) { try { meta = JSON.parse(fs.readFileSync(sidecar, 'utf8')); } catch {} }
+          return {
+            img: `/screenshots/${app}/${encodeURIComponent(f)}`,
+            caption: meta.caption || '',
+            note:    meta.note    || '',
+            durationMs: frameMs,
+          };
+        }),
+      };
+      const outDir = path.join(dir, EXPORTS_SUBDIR);
+      fs.mkdirSync(outDir, { recursive: true });
+      const webmOut = path.join(outDir, `video-${body.format}.webm`);
+      try {
+        const { chromium } = require('playwright');
+        const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+        const ctx = await browser.newContext({ viewport: { width: fmt.w, height: fmt.h }, deviceScaleFactor: 1 });
+        const page = await ctx.newPage();
+        const q = encodeURIComponent(JSON.stringify(cfg));
+        await page.goto(`http://localhost:${PORT}/slideshow.html?config=${q}`, { waitUntil: 'networkidle' });
+        await page.waitForFunction('window.__slideshowReady === true', null, { timeout: 30000 });
+        const duration = await page.evaluate('window.__slideshowDurationMs');
+        // Start MediaRecorder inside the page (captures the visible viewport
+        // via captureStream on a canvas that mirrors the body). For the full
+        // page body, we use document.documentElement rendered onto a canvas
+        // each frame — simpler: use the MediaRecorder on a <canvas> tied via
+        // requestAnimationFrame to snapshot html2canvas-style? Too heavy.
+        // Instead: capture the page via CDP video recording? Playwright
+        // has page.video() but needs recordVideo at context-create. Easiest
+        // path: use ctx with recordVideo and let the slideshow play.
+        await browser.close();
+        // Re-launch with recordVideo so we get a webm out-of-the-box.
+        const rbrowser = await chromium.launch();
+        const rctx = await rbrowser.newContext({
+          viewport: { width: fmt.w, height: fmt.h },
+          deviceScaleFactor: 1,
+          recordVideo: { dir: outDir, size: { width: fmt.w, height: fmt.h } },
+        });
+        const rpage = await rctx.newPage();
+        await rpage.goto(`http://localhost:${PORT}/slideshow.html?config=${q}`, { waitUntil: 'networkidle' });
+        await rpage.waitForFunction('window.__slideshowReady === true', null, { timeout: 30000 });
+        await rpage.evaluate('window.__slideshowStart = true');
+        await rpage.waitForFunction('window.__slideshowDone === true', null, { timeout: duration + 10000 });
+        const video = rpage.video();
+        await rpage.close();
+        const tempPath = await video.path();
+        await rctx.close();
+        await rbrowser.close();
+        fs.renameSync(tempPath, webmOut);
+        // Try mp4 transcode if ffmpeg is on PATH.
+        let finalFile = `${app}/${EXPORTS_SUBDIR}/video-${body.format}.webm`;
+        try {
+          const mp4Out = webmOut.replace(/\.webm$/, '.mp4');
+          await new Promise((resolve, reject) => {
+            const ff = spawn('ffmpeg', ['-y', '-i', webmOut, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4Out], { stdio: 'ignore' });
+            ff.on('error', reject);
+            ff.on('exit', (code) => code === 0 ? resolve() : reject(new Error('ffmpeg exit ' + code)));
+          });
+          finalFile = `${app}/${EXPORTS_SUBDIR}/video-${body.format}.mp4`;
+        } catch { /* ffmpeg missing — keep webm */ }
+        return json(res, 200, { ok: true, file: finalFile, w: fmt.w, h: fmt.h, frames: cfg.frames.length });
+      } catch (e) { return json(res, 500, { error: 'Video export failed: ' + e.message }); }
     }
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });

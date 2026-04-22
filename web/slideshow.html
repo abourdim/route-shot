@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>route-shot slideshow / video renderer</title>
+<!--
+  Opened by the dashboard in a Playwright context at the target platform
+  dimensions (1080×1920 reel, 1080×1080 square, etc). Plays the configured
+  slide sequence and records it via MediaRecorder API — the server polls
+  window.__slideshowVideoBlob then downloads via evaluate(arrayBuffer).
+  Query params:
+    ?config=<JSON url-encoded>
+  config shape: { frames:[{img,caption,note,durationMs,transition}], fps, audio, watermark, credits }
+-->
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background:#000; color:#fff; font-family:system-ui, -apple-system, sans-serif; }
+  #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .slide { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    opacity:0; will-change:opacity, transform; background:#000; }
+  .slide.show { opacity:1; }
+  .slide img { max-width:94%; max-height:84%; width:auto; height:auto; object-fit:contain;
+    box-shadow:0 16px 64px rgba(0,0,0,0.6); border-radius:8px; will-change:transform; }
+  .lower {
+    position:absolute; left:0; right:0; bottom:6%; padding:16px 32px; text-align:center;
+    font-size:clamp(20px, 3.2vw, 42px); font-weight:700; letter-spacing:-0.01em;
+    text-shadow:0 2px 8px rgba(0,0,0,0.8); color:#fff; pointer-events:none;
+  }
+  .note {
+    position:absolute; left:0; right:0; bottom:2%; text-align:center;
+    font-size:clamp(12px, 1.6vw, 20px); color:rgba(255,255,255,0.75);
+    text-shadow:0 1px 4px rgba(0,0,0,0.8); pointer-events:none;
+  }
+  .watermark {
+    position:absolute; right:20px; bottom:20px; opacity:0.8; font-size:12px;
+    color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.6); pointer-events:none;
+  }
+  /* Ken-Burns zoom */
+  @keyframes kb { from { transform:scale(1); } to { transform:scale(1.08); } }
+  .kb img { animation:kb linear forwards; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="watermark" class="watermark"></div>
+<script>
+  const cfg = (() => {
+    const raw = new URLSearchParams(location.search).get('config');
+    try { return JSON.parse(decodeURIComponent(raw || '{}')); } catch { return {}; }
+  })();
+  const frames = cfg.frames || [];
+  const fps = cfg.fps || 30;
+  const stage = document.getElementById('stage');
+  if (cfg.watermark) document.getElementById('watermark').textContent = cfg.watermark;
+
+  function buildSlide(f) {
+    const s = document.createElement('div');
+    s.className = 'slide' + (f.kenBurns !== false ? ' kb' : '');
+    const img = document.createElement('img');
+    img.src = f.img;
+    img.style.animationDuration = ((f.durationMs || 2500) + 400) + 'ms';
+    s.appendChild(img);
+    if (f.caption) { const l = document.createElement('div'); l.className = 'lower'; l.textContent = f.caption; s.appendChild(l); }
+    if (f.note)    { const n = document.createElement('div'); n.className = 'note';  n.textContent = f.note;    s.appendChild(n); }
+    return s;
+  }
+
+  async function preload() {
+    await Promise.all(frames.map((f) => new Promise((res) => {
+      const i = new Image(); i.onload = i.onerror = () => res(); i.src = f.img;
+    })));
+  }
+
+  async function play() {
+    await preload();
+    // Prepare all slides up front so transitions can cross-fade.
+    const nodes = frames.map((f) => {
+      const s = buildSlide(f);
+      stage.appendChild(s);
+      return s;
+    });
+    const fade = 400;  // ms cross-fade
+    window.__slideshowDurationMs = frames.reduce((a, f) => a + (f.durationMs || 2500), 0) + fade;
+    window.__slideshowReady = true;
+    // Wait for external "start" signal so the recorder can spin up first.
+    await new Promise((res) => {
+      Object.defineProperty(window, '__slideshowStart', {
+        set: () => res(),
+        configurable: true,
+      });
+      if (window.__slideshowStart) res();
+    });
+    for (let i = 0; i < nodes.length; i++) {
+      const f = frames[i];
+      const dur = f.durationMs || 2500;
+      nodes[i].style.transition = 'opacity ' + fade + 'ms ease';
+      nodes[i].classList.add('show');
+      if (i > 0) {
+        nodes[i - 1].classList.remove('show');
+      }
+      await new Promise((r) => setTimeout(r, dur));
+    }
+    // Fade out the last slide then flag done.
+    if (nodes.length) nodes[nodes.length - 1].classList.remove('show');
+    await new Promise((r) => setTimeout(r, fade));
+    window.__slideshowDone = true;
+  }
+  play();
+</script>
+</body>
+</html>
