@@ -156,9 +156,33 @@
         Upload JSON… <input type="file" id="appUpload" accept=".json" style="display:none;">
       </label>
     </div>
-    <div id="formFields" style="display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; align-items: center;"></div>
+    <div class="row" style="margin: 6px 0 10px; flex-wrap: wrap;">
+      <span class="muted" style="font-size: 12px;">Quick recipes:</span>
+      <button class="recipe" data-recipe="main">Only main page</button>
+      <button class="recipe" data-recipe="modal">Dismiss common modals</button>
+      <button class="recipe" data-recipe="auto">Auto-snap every button</button>
+      <button class="recipe" data-recipe="isolated">Isolated shots (independent)</button>
+      <button class="recipe" data-recipe="debug">Headful debug</button>
+    </div>
+    <div id="formFields" style="display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; align-items: flex-start;"></div>
+    <datalist id="dismissExamples">
+      <option value='button:has-text("Let'"'"'s Go")'>
+      <option value='button:has-text("Got it")'>
+      <option value='button:has-text("Accept")'>
+      <option value='button:has-text("I agree")'>
+      <option value='button:has-text("Accept all")'>
+      <option value='button.close, button[aria-label="close"]'>
+      <option value='.modal button.primary'>
+    </datalist>
+    <datalist id="blocklistExamples">
+      <option value="delete|remove|clear|reset|logout|pay|confirm|send">
+      <option value="delete|submit|save|pay|confirm|logout|sign.?out">
+      <option value="🌙|⚡|☁️|🔥">
+      <option value="^$">
+    </datalist>
     <div class="row" style="margin-top: 10px;">
       <button id="appFormSave" class="primary">Save to apps.json</button>
+      <button id="appFormDryRun">Dry run this app</button>
       <span class="save-hint" id="formHint"></span>
     </div>
 
@@ -715,23 +739,52 @@ $('scanBtn').onclick = async (...a) => { const r = await origScanBtn(...a); setT
 let currentApps = { apps: [] };
 let currentIdx = 0;
 
-function field(label, node) {
+// Build a labeled row with an inline hint line. The control is wrapped in
+// a flex container so we can stick example chips / dropdowns beside it.
+function field(label, node, hint = '', opts = {}) {
   const l = document.createElement('label');
   l.className = 'muted';
   l.textContent = label;
   l.style.fontSize = '12px';
-  return [l, node];
+  l.style.paddingTop = '6px';
+
+  const wrap = document.createElement('div');
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = 'column';
+  wrap.style.gap = '3px';
+
+  if (opts.inline) {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '6px';
+    row.style.alignItems = 'center';
+    row.appendChild(node);
+    if (opts.inline) opts.inline.forEach((el) => row.appendChild(el));
+    wrap.appendChild(row);
+  } else {
+    wrap.appendChild(node);
+  }
+  if (hint) {
+    const h = document.createElement('div');
+    h.className = 'muted';
+    h.style.fontSize = '11px';
+    h.style.lineHeight = '1.3';
+    h.innerHTML = hint;
+    wrap.appendChild(h);
+  }
+  return [l, wrap];
 }
 
-function inp(val = '', placeholder = '') {
+function inp(val = '', placeholder = '', listId = '') {
   const e = document.createElement('input');
   e.type = 'text'; e.value = val; e.placeholder = placeholder;
+  if (listId) e.setAttribute('list', listId);
   return e;
 }
 function num(val = '', placeholder = '') {
   const e = document.createElement('input');
   e.type = 'number'; e.value = val; e.placeholder = placeholder;
-  e.style.width = '120px';
+  e.style.width = '140px';
   return e;
 }
 function chk(val = false) {
@@ -743,11 +796,21 @@ function sel(val, options) {
   const e = document.createElement('select');
   for (const o of options) {
     const opt = document.createElement('option');
-    opt.value = o; opt.textContent = o;
-    if (o === val) opt.selected = true;
+    if (typeof o === 'string') { opt.value = o; opt.textContent = o; }
+    else                       { opt.value = o.value; opt.textContent = o.label; }
+    if (opt.value === val) opt.selected = true;
     e.appendChild(opt);
   }
   return e;
+}
+function exampleBtn(targetInput, value, label = 'example') {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = label;
+  b.style.fontSize = '11px';
+  b.style.padding = '2px 8px';
+  b.onclick = (e) => { e.preventDefault(); targetInput.value = value; targetInput.dispatchEvent(new Event('input')); };
+  return b;
 }
 
 function renderForm() {
@@ -755,30 +818,51 @@ function renderForm() {
   host.innerHTML = '';
   const app = currentApps.apps[currentIdx] || {};
 
-  const name     = inp(app.name || '', 'my-app');
-  const url      = inp(app.url || '', 'https://example.com');
-  const dismiss  = inp(app.dismiss || '', 'button:has-text("Let\'s Go")');
-  const maxPages = num(app.maxPages ?? '', '200');
-  const autoBtn  = chk(app.autoButtons);
-  const block    = inp(app.autoButtonsBlocklist || '', '🌙|⚡|delete|reset');
-  const blockMax = num(app.autoButtonsMax ?? '', '40');
-  const clickMode = sel(app.clickMode || 'sequential', ['sequential', 'independent']);
-  const headful   = chk(app.headful);
+  const name      = inp(app.name || '', 'bit-playground');
+  const url       = inp(app.url || '', 'https://example.com');
+  const dismiss   = inp(app.dismiss || '', '(none)', 'dismissExamples');
+  const maxPages  = num(app.maxPages ?? '', '200');
+  const includeHash = chk(app.includeHash);
+  const autoBtn   = chk(app.autoButtons);
+  const block     = inp(app.autoButtonsBlocklist || '', '(none)', 'blocklistExamples');
+  const blockMax  = num(app.autoButtonsMax ?? '', '40');
+  const clickMode = sel(app.clickMode || 'sequential', [
+    { value: 'sequential',  label: 'sequential — clicks accumulate (tab-like)' },
+    { value: 'independent', label: 'independent — reload before each click (isolated)' },
+  ]);
+  const navTimeout  = num(app.navTimeout ?? '', '15000');
+  const dismissWait = num(app.dismissWait ?? '', '400');
+  const clickWait   = num(app.clickWait ?? '', '500');
+  const maxDepth    = num(app.maxDepth ?? '', '0');
+  const headful     = chk(app.headful);
 
-  // preSteps dynamic rows
+  // dynamic preSteps rows
   const preBox = document.createElement('div');
-  preBox.style.gridColumn = '2';
   preBox.style.display = 'grid';
   preBox.style.gap = '4px';
 
   function addPreRow(step = { action: 'click', selector: '', value: '' }) {
     const r = document.createElement('div');
     r.style.display = 'grid';
-    r.style.gridTemplateColumns = '110px 1fr 1fr 24px';
+    r.style.gridTemplateColumns = '120px 1fr 1fr 24px';
     r.style.gap = '4px';
     const a = sel(step.action || 'click', ['click', 'fill', 'press', 'goto', 'waitForSelector', 'waitForURL', 'wait']);
-    const s = inp(step.selector || '', 'selector');
-    const v = inp(step.value ?? '', 'value / URL / key');
+    const s = inp(step.selector || '', 'selector (e.g. #email or button:has-text("Sign in"))');
+    const v = inp(step.value ?? '', '');
+    const updatePlaceholder = () => {
+      const placeholders = {
+        click: '(no value needed)',
+        fill: 'value to type',
+        press: 'key (Enter, Tab, …)',
+        goto: 'URL',
+        waitForSelector: '(no value)',
+        waitForURL: 'URL pattern (**/dashboard)',
+        wait: 'milliseconds (e.g. 1000)',
+      };
+      v.placeholder = placeholders[a.value] || '';
+    };
+    a.onchange = updatePlaceholder;
+    updatePlaceholder();
     const rm = document.createElement('button');
     rm.textContent = '✕'; rm.style.padding = '0';
     rm.onclick = () => r.remove();
@@ -790,45 +874,70 @@ function renderForm() {
   addBtn.textContent = '+ Add preStep';
   addBtn.onclick = () => addPreRow();
 
-  // clicks (explicit selectors) — textarea, one per line
+  // clicks textarea, one selector per line
   const clicks = document.createElement('textarea');
   clicks.spellcheck = false;
   clicks.style.minHeight = '80px';
   clicks.style.fontFamily = 'monospace';
   clicks.value = (app.clicks || []).join('\n');
-  clicks.placeholder = '#tabBtn1\n#tabBtn2\nbutton:has-text("Submit")';
+  clicks.placeholder = '#myBtn1\n#myBtn2\nbutton:has-text("Submit")';
 
   host.append(
-    ...field('name',                name),
-    ...field('url',                 url),
-    ...field('dismiss',             dismiss),
-    ...field('maxPages',            maxPages),
-    ...field('autoButtons',         autoBtn),
-    ...field('autoButtonsBlocklist', block),
-    ...field('autoButtonsMax',      blockMax),
-    ...field('clickMode',           clickMode),
-    ...field('headful',             headful),
-    ...field('preSteps',            preBox),
-    ...field('',                    addBtn),
-    ...field('clicks (one per line)', clicks),
+    ...field('name', name,
+      'A label — becomes the screenshots subfolder name.'),
+    ...field('url', url,
+      'Start URL. The crawler always begins here.'),
+    ...field('dismiss', dismiss,
+      'Selector clicked right after page load — usually a welcome modal or cookie banner. Pick from the dropdown for examples.'),
+    ...field('maxPages', maxPages,
+      'How many pages to BFS-crawl from start. <b>Set to 1</b> to snapshot only the start page.'),
+    ...field('includeHash', includeHash,
+      'Treat <code>#/foo</code> and <code>#/bar</code> as separate pages (for hash-routed SPAs).'),
+    ...field('autoButtons', autoBtn,
+      'Auto-discover and click every <code>&lt;button&gt;</code>. One screenshot per discovered button.'),
+    ...field('autoButtonsBlocklist', block,
+      'Regex (case-insensitive, <code>|</code> = OR) of button texts to skip. Examples in the dropdown.'),
+    ...field('autoButtonsMax', blockMax,
+      'Cap on auto-discovered buttons per page (default 40 — bump if a page has more).'),
+    ...field('clickMode', clickMode,
+      '<b>sequential</b> for tabs (state accumulates) · <b>independent</b> for isolated states (reload between clicks).'),
+    ...field('preSteps', preBox,
+      'Setup actions run after dismiss, before crawling. Replayed on every independent reload.'),
+    ...field('', addBtn),
+    ...field('clicks', clicks,
+      'Explicit selectors to click (one per line). Each becomes a variant screenshot.'),
+    ...field('— advanced —', document.createElement('div'),
+      'Tweak only if defaults aren\'t working.'),
+    ...field('navTimeout', navTimeout, 'ms per page navigation (default 15000)'),
+    ...field('dismissWait', dismissWait, 'ms to wait after dismiss click (default 400)'),
+    ...field('clickWait', clickWait, 'ms to wait after each variant click before screenshotting (default 500)'),
+    ...field('maxDepth', maxDepth, 'Recursive auto-button exploration depth — <b>0</b> = flat (default), <b>1</b> = click then discover more.'),
+    ...field('headful', headful, 'Show the Chromium window — useful for debugging modals.'),
   );
 
-  // store refs on host for serialization
-  host._refs = { name, url, dismiss, maxPages, autoBtn, block, blockMax, clickMode, headful, preBox, clicks };
+  host._refs = {
+    name, url, dismiss, maxPages, includeHash, autoBtn, block, blockMax, clickMode,
+    navTimeout, dismissWait, clickWait, maxDepth, headful, preBox, clicks,
+  };
 }
 
 function serializeForm() {
   const r = $('formFields')._refs;
   const out = {};
-  if (r.name.value.trim())     out.name = r.name.value.trim();
-  if (r.url.value.trim())      out.url = r.url.value.trim();
-  if (r.dismiss.value.trim())  out.dismiss = r.dismiss.value.trim();
-  if (r.maxPages.value)        out.maxPages = Number(r.maxPages.value);
-  if (r.autoBtn.checked)       out.autoButtons = true;
-  if (r.block.value.trim())    out.autoButtonsBlocklist = r.block.value.trim();
-  if (r.blockMax.value)        out.autoButtonsMax = Number(r.blockMax.value);
+  if (r.name.value.trim())        out.name = r.name.value.trim();
+  if (r.url.value.trim())         out.url = r.url.value.trim();
+  if (r.dismiss.value.trim())     out.dismiss = r.dismiss.value.trim();
+  if (r.maxPages.value)           out.maxPages = Number(r.maxPages.value);
+  if (r.includeHash.checked)      out.includeHash = true;
+  if (r.autoBtn.checked)          out.autoButtons = true;
+  if (r.block.value.trim())       out.autoButtonsBlocklist = r.block.value.trim();
+  if (r.blockMax.value)           out.autoButtonsMax = Number(r.blockMax.value);
   if (r.clickMode.value && r.clickMode.value !== 'sequential') out.clickMode = r.clickMode.value;
-  if (r.headful.checked)       out.headful = true;
+  if (r.navTimeout.value)         out.navTimeout = Number(r.navTimeout.value);
+  if (r.dismissWait.value)        out.dismissWait = Number(r.dismissWait.value);
+  if (r.clickWait.value)          out.clickWait = Number(r.clickWait.value);
+  if (r.maxDepth.value)           out.maxDepth = Number(r.maxDepth.value);
+  if (r.headful.checked)          out.headful = true;
 
   const pre = [];
   r.preBox.querySelectorAll(':scope > div').forEach((row) => {
@@ -845,6 +954,33 @@ function serializeForm() {
   if (clicks.length) out.clicks = clicks;
 
   return out;
+}
+
+// quick-recipe buttons mutate the form's controls without saving
+function applyRecipe(name) {
+  const r = $('formFields')._refs;
+  if (!r) return;
+  switch (name) {
+    case 'main':
+      r.maxPages.value = '1';
+      break;
+    case 'modal':
+      if (!r.dismiss.value.trim()) r.dismiss.value = 'button:has-text("Let\'s Go"), button:has-text("Got it"), button:has-text("Accept")';
+      break;
+    case 'auto':
+      r.autoBtn.checked = true;
+      if (!r.block.value.trim()) r.block.value = 'delete|remove|clear|reset|logout|pay|confirm|send';
+      break;
+    case 'isolated':
+      r.autoBtn.checked = true;
+      r.clickMode.value = 'independent';
+      break;
+    case 'debug':
+      r.headful.checked = true;
+      break;
+  }
+  $('formHint').textContent = `recipe "${name}" applied (not saved yet)`;
+  $('formHint').className = 'save-hint dirty';
 }
 
 function populateAppPick() {
@@ -906,6 +1042,16 @@ $('appUpload').onchange = async (e) => {
   $('formHint').textContent = `Uploaded ${imported.length} app(s) — not saved yet`;
   $('formHint').className = 'save-hint dirty';
   e.target.value = '';
+};
+
+document.querySelectorAll('.recipe').forEach((b) => {
+  b.onclick = () => applyRecipe(b.dataset.recipe);
+});
+
+$('appFormDryRun').onclick = async () => {
+  // save first, then trigger a dry run
+  await $('appFormSave').onclick();
+  $('runDryBtn').click();
 };
 
 $('appFormSave').onclick = async () => {
