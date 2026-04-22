@@ -274,6 +274,29 @@
     </details>
   </section>
 
+  <details class="panel-collapse" style="grid-column: 1 / -1;">
+    <summary>
+      <span>📸 Manual snapshot session</span>
+      <span class="summary-tag" id="manualSummaryTag">idle</span>
+    </summary>
+    <div class="panel-body">
+      <p class="muted" style="font-size: 12px; margin: 6px 0 10px;">
+        Open a headful Chromium, drive it by hand, fire a screenshot whenever you want. Great for hardware pairing, login flows, tricky modal states.
+      </p>
+      <div class="row">
+        <input type="text" id="manualUrl" placeholder="https://example.com" style="flex: 2;">
+        <input type="text" id="manualAppName" placeholder="app name (folder)" style="flex: 1;" value="manual">
+        <button id="manualStart" class="primary">Start session</button>
+        <button id="manualStop" disabled>Stop</button>
+      </div>
+      <div class="row">
+        <input type="text" id="manualLabel" placeholder="snapshot label (optional) — becomes part of the filename" style="flex: 1;">
+        <button id="manualSnap" disabled title="Ctrl/Cmd+S also works">📸 Snapshot</button>
+      </div>
+      <div id="manualStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+    </div>
+  </details>
+
   <details class="panel-collapse" open style="grid-column: 1 / -1;">
     <summary>
       <span>Scan URL → pick buttons</span>
@@ -714,6 +737,82 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowRight') $('lbNext').click();
   else if (e.key === 'Delete')     $('lbDel').click();
   else if (e.key === 'f' || e.key === 'F') $('lbFit').click();
+});
+
+// --- manual snapshot session ------------------------------------------------
+function setManualUi(running, info = {}) {
+  $('manualStart').disabled = running;
+  $('manualStop').disabled  = !running;
+  $('manualSnap').disabled  = !running;
+  $('manualUrl').disabled   = running;
+  $('manualAppName').disabled = running;
+  const tag = $('manualSummaryTag');
+  if (running) {
+    tag.textContent = `live · ${info.count || 0} shot(s)`;
+    tag.style.color = 'var(--good)';
+  } else {
+    tag.textContent = 'idle';
+    tag.style.color = '';
+  }
+}
+
+async function refreshManualStatus() {
+  try {
+    const s = await fetchJSON('/api/manual/status');
+    setManualUi(s.running, s);
+    if (s.running) {
+      $('manualStatus').innerHTML =
+        `session on <code>${escapeHtml(s.appName)}</code> · current URL: <code>${escapeHtml(s.currentUrl || s.url || '')}</code> · <b>${s.count}</b> snapshot(s) taken`;
+    } else {
+      $('manualStatus').textContent = '';
+    }
+  } catch {}
+}
+setInterval(refreshManualStatus, 2000);
+
+$('manualStart').onclick = async () => {
+  const url = $('manualUrl').value.trim();
+  if (!url) { alert('URL required'); return; }
+  $('manualStatus').textContent = 'Starting headful Chromium…';
+  const r = await fetchJSON('/api/manual/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      appName: $('manualAppName').value.trim() || 'manual',
+      dismiss: undefined,
+    }),
+  });
+  if (r.error) { alert(r.error); $('manualStatus').textContent = 'Failed: ' + r.error; return; }
+  setManualUi(true, { count: 0 });
+  $('manualStatus').textContent = 'Session started. Drive the browser, hit 📸 whenever.';
+  $('manualLabel').focus();
+};
+
+$('manualSnap').onclick = async () => {
+  const r = await fetchJSON('/api/manual/snapshot', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label: $('manualLabel').value.trim() || undefined }),
+  });
+  if (r.error) { alert(r.error); return; }
+  $('manualLabel').value = '';
+  $('manualStatus').innerHTML =
+    `✓ saved <code>${escapeHtml(r.filename)}</code> — current URL: <code>${escapeHtml(r.url)}</code>`;
+  setManualUi(true, { count: r.count });
+  loadGallery();
+};
+
+$('manualStop').onclick = async () => {
+  await fetchJSON('/api/manual/stop', { method: 'POST' });
+  setManualUi(false);
+  $('manualStatus').textContent = 'Session closed.';
+};
+
+// Ctrl/Cmd+S anywhere on the page triggers a snapshot during a manual session.
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && !$('manualSnap').disabled) {
+    e.preventDefault();
+    $('manualSnap').click();
+  }
 });
 
 // --- scan ------------------------------------------------------------------

@@ -37,6 +37,24 @@ function pushHistory(kind, url) {
   saveHistory(h);
 }
 
+// --- manual session state ---------------------------------------------------
+// A persistent headful Playwright page the user drives themselves; each
+// /api/manual/snapshot call captures the page's current state. Closes when
+// the user explicitly stops or the dashboard process exits.
+const manual = {
+  browser: null, context: null, page: null,
+  url: null, appName: 'manual', count: 0,
+};
+
+async function manualStop() {
+  try { if (manual.context) await manual.context.close(); } catch {}
+  try { if (manual.browser) await manual.browser.close(); } catch {}
+  manual.browser = manual.context = manual.page = null;
+  manual.url = null;
+  manual.count = 0;
+}
+process.on('exit', () => { try { manual.browser?.close(); } catch {} });
+
 // --- run state --------------------------------------------------------------
 const run = {
   proc:    null,
@@ -381,6 +399,64 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/stop' && req.method === 'POST') {
       if (run.proc) { run.proc.kill('SIGTERM'); return json(res, 200, { ok: true }); }
       return json(res, 200, { ok: true, nothing: true });
+    }
+
+    // API: manual — user-driven snapshot session (headful Playwright page kept
+    // alive across requests so the user can navigate/click by hand and fire
+    // /api/manual/snapshot at key moments).
+    if (pathname === '/api/manual/start' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!body.url) return json(res, 400, { error: 'url required' });
+      if (manual.page) await manualStop();
+      try {
+        const { chromium } = require('playwright');
+        manual.browser = await chromium.launch({ headless: false });
+        manual.context = await manual.browser.newContext();
+        manual.page    = await manual.context.newPage();
+        manual.url     = body.url;
+        manual.appName = (body.appName || 'manual').replace(/[^\w.-]/g, '_');
+        manual.count   = 0;
+        await manual.page.goto(body.url, { waitUntil: 'networkidle', timeout: 20000 });
+        if (body.dismiss) {
+          for (const sel of String(body.dismiss).split(',').map((s) => s.trim()).filter(Boolean)) {
+            try { const el = await manual.page.$(sel); if (el) await el.click({ timeout: 1000 }); } catch {}
+          }
+        }
+        return json(res, 200, { ok: true, url: manual.url, appName: manual.appName });
+      } catch (e) { await manualStop(); return json(res, 500, { error: e.message }); }
+    }
+
+    if (pathname === '/api/manual/snapshot' && req.method === 'POST') {
+      if (!manual.page) return json(res, 400, { error: 'no manual session — start one first' });
+      const body = await readBody(req);
+      try {
+        manual.count++;
+        const outDir = path.join(SHOTS, manual.appName);
+        fs.mkdirSync(outDir, { recursive: true });
+        const labelPart = (body.label || '').trim().replace(/[^\w.-]+/g, '_').slice(0, 60);
+        const fname = `${String(manual.count).padStart(3, '0')}${labelPart ? '_' + labelPart : ''}.png`;
+        await manual.page.screenshot({ path: path.join(outDir, fname), fullPage: true });
+        // also record current URL so the user knows which route the shot is of
+        const currentUrl = manual.page.url();
+        return json(res, 200, { ok: true, filename: `${manual.appName}/${fname}`, count: manual.count, url: currentUrl });
+      } catch (e) { return json(res, 500, { error: e.message }); }
+    }
+
+    if (pathname === '/api/manual/stop' && req.method === 'POST') {
+      await manualStop();
+      return json(res, 200, { ok: true });
+    }
+
+    if (pathname === '/api/manual/status' && req.method === 'GET') {
+      let currentUrl = null;
+      if (manual.page) { try { currentUrl = manual.page.url(); } catch {} }
+      return json(res, 200, {
+        running: !!manual.page,
+        url: manual.url,
+        currentUrl,
+        appName: manual.appName,
+        count: manual.count,
+      });
     }
 
     // API: scan — launch Playwright, goto URL, dismiss, enumerate clickables
