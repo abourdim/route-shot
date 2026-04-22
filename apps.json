@@ -13,38 +13,6 @@
           "selector": "button:has-text(\"expert\")"
         }
       ],
-      "clicks": [
-        "button.theme-btn.active",
-        "button.theme-btn",
-        "button.lang-btn.active",
-        "button.lang-btn",
-        "a:has-text(\"📖\")",
-        "#clearCacheBtn",
-        "#connectBtn",
-        "#disconnectBtn",
-        "#beginnerModeBtn",
-        "#expertModeBtn",
-        "#firmwareBtn",
-        "#clearActivityBtn",
-        "#controlsTabBtn",
-        "#sensesTabBtn",
-        "#servosTabBtn",
-        "#gamepadTabBtn",
-        "#graphTabBtn",
-        "#board3dTabBtn",
-        "#othersTabBtn",
-        "#sendTextBtn",
-        "#sendLedPatternBtn",
-        "#clearMatrixBtn",
-        "button.chip-btn.small",
-        "#buzzLow",
-        "#buzzMid",
-        "#buzzHigh",
-        "#buzzMelody",
-        "#buzzPlay",
-        "#buzzStop",
-        "#onboardingDismiss"
-      ],
       "clickMode": "independent"
     }
   ]

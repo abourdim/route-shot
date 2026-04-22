@@ -14,6 +14,26 @@ const ROOT     = __dirname;
 const CRAWLER  = path.join(ROOT, 'route-shot.js');
 const APPS_CFG = path.join(ROOT, 'apps.json');
 const SHOTS    = path.join(ROOT, 'screenshots');
+const HISTORY  = path.join(ROOT, '.history.json');
+const HISTORY_CAP = 50;
+
+function loadHistory() {
+  try { return JSON.parse(fs.readFileSync(HISTORY, 'utf8')); }
+  catch { return { runs: [], scans: [] }; }
+}
+function saveHistory(h) {
+  try { fs.writeFileSync(HISTORY, JSON.stringify(h, null, 2)); } catch {}
+}
+function pushHistory(kind, url) {
+  if (!url) return;
+  const h = loadHistory();
+  const list = h[kind] || (h[kind] = []);
+  const i = list.findIndex((e) => e.url === url);
+  if (i !== -1) list.splice(i, 1);       // move to top if exists
+  list.unshift({ url, ts: Date.now() });
+  if (list.length > HISTORY_CAP) list.length = HISTORY_CAP;
+  saveHistory(h);
+}
 
 // --- run state --------------------------------------------------------------
 const run = {
@@ -192,10 +212,26 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    // API: history (read + clear)
+    if (pathname === '/api/history' && req.method === 'GET') {
+      return json(res, 200, loadHistory());
+    }
+    if (pathname === '/api/history' && req.method === 'DELETE') {
+      const kind = u.searchParams.get('kind');
+      const url  = u.searchParams.get('url');
+      const h = loadHistory();
+      if (kind && url && h[kind]) h[kind] = h[kind].filter((e) => e.url !== url);
+      else if (kind) h[kind] = [];
+      else { h.runs = []; h.scans = []; }
+      saveHistory(h);
+      return json(res, 200, { ok: true });
+    }
+
     // API: run single URL
     if (pathname === '/api/run/single' && req.method === 'POST') {
       const body = await readBody(req);
       if (!body.url) return json(res, 400, { error: 'url required' });
+      pushHistory('runs', body.url);
       const r = spawnCrawler([body.url], `single: ${body.url}`);
       return json(res, r.error ? 409 : 200, r);
     }
@@ -217,6 +253,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/scan' && req.method === 'POST') {
       const body = await readBody(req);
       if (!body.url) return json(res, 400, { error: 'url required' });
+      pushHistory('scans', body.url);
       try {
         const { chromium } = require('playwright');
         const browser = await chromium.launch();

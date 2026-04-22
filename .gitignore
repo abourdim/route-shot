@@ -18,6 +18,8 @@ npm-debug.log*
 .server.pid
 .last-url
 .dashboard.pid
+.dashboard.log
+.history.json
 .import-*.json
 
 # user recordings (Recorder exports)

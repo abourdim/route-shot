@@ -101,9 +101,14 @@
   <section class="panel">
     <h2>Run</h2>
     <div class="row">
-      <input type="text" id="singleUrl" placeholder="https://example.com">
+      <input type="text" id="singleUrl" placeholder="https://example.com" list="runsList">
+      <datalist id="runsList"></datalist>
       <button id="runSingle">Crawl single URL</button>
     </div>
+    <details style="margin-top: -4px;">
+      <summary class="muted" style="cursor: pointer; font-size: 12px;">Recent runs</summary>
+      <div id="runsHistory" class="row" style="flex-wrap: wrap; gap: 4px; margin-top: 6px;"></div>
+    </details>
     <div class="row">
       <button id="runBatch" class="primary">Run batch (apps.json)</button>
       <button id="stopBtn" disabled>Stop</button>
@@ -137,10 +142,15 @@
   <section class="panel" style="grid-column: 1 / -1;">
     <h2>Scan URL → pick buttons</h2>
     <div class="row">
-      <input type="text" id="scanUrl" placeholder="https://example.com (leave blank to use first app in apps.json)">
+      <input type="text" id="scanUrl" placeholder="https://example.com (leave blank to use first app in apps.json)" list="scansList">
+      <datalist id="scansList"></datalist>
       <input type="text" id="scanDismiss" placeholder="dismiss selector (optional)" style="flex: 1;">
       <button id="scanBtn">Scan</button>
     </div>
+    <details style="margin-top: -4px;">
+      <summary class="muted" style="cursor: pointer; font-size: 12px;">Recent scans</summary>
+      <div id="scansHistory" class="row" style="flex-wrap: wrap; gap: 4px; margin-top: 6px;"></div>
+    </details>
     <div class="row muted" id="scanStatus"></div>
     <div id="scanResults" style="max-height: 400px; overflow-y: auto;"></div>
     <div class="row" id="scanActions" style="display: none;">
@@ -489,8 +499,44 @@ $('scanAddBtn').onclick = async () => {
   await loadApps();
 };
 
+// --- history ----------------------------------------------------------------
+async function loadHistory() {
+  let h;
+  try { h = await fetchJSON('/api/history'); } catch { return; }
+  renderHistory('runs',  h.runs || [],  $('runsList'),  $('runsHistory'),  $('singleUrl'));
+  renderHistory('scans', h.scans || [], $('scansList'), $('scansHistory'), $('scanUrl'));
+}
+
+function renderHistory(kind, entries, datalistEl, chipsEl, targetInput) {
+  datalistEl.innerHTML = entries.map((e) =>
+    `<option value="${escapeHtml(e.url)}">`).join('');
+  chipsEl.innerHTML = '';
+  if (!entries.length) { chipsEl.innerHTML = '<span class="muted">(empty)</span>'; return; }
+  entries.slice(0, 10).forEach((e) => {
+    const chip = document.createElement('span');
+    chip.className = 'pill';
+    chip.style.cursor = 'pointer';
+    chip.title = new Date(e.ts).toLocaleString();
+    chip.innerHTML = `<span>${escapeHtml(e.url)}</span> <span style="opacity:0.5; margin-left:4px;" title="forget">✕</span>`;
+    chip.querySelector('span:first-child').onclick = () => { targetInput.value = e.url; };
+    chip.querySelector('span:last-child').onclick  = async (ev) => {
+      ev.stopPropagation();
+      await fetch('/api/history?kind=' + kind + '&url=' + encodeURIComponent(e.url), { method: 'DELETE' });
+      loadHistory();
+    };
+    chipsEl.appendChild(chip);
+  });
+}
+
+// refresh history after a run / scan completes
+const origRunSingle = $('runSingle').onclick;
+$('runSingle').onclick = async (...a) => { const r = await origRunSingle(...a); setTimeout(loadHistory, 300); return r; };
+const origScanBtn = $('scanBtn').onclick;
+$('scanBtn').onclick = async (...a) => { const r = await origScanBtn(...a); setTimeout(loadHistory, 300); return r; };
+
 loadApps();
 loadGallery();
+loadHistory();
 </script>
 
 </body>
