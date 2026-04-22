@@ -455,6 +455,32 @@
         </div>
       </div>
       <div id="videoStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+
+      <!-- Batch render: one video per mode, side-by-side compare page at the end. -->
+      <div style="margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--border);">
+        <div class="row" style="align-items: flex-start;">
+          <label class="muted" style="font-size: 12px; padding-top: 6px; min-width: 92px;">
+            Test modes<br><span style="opacity:0.7;">(batch)</span>
+          </label>
+          <select id="batchModes" multiple size="6" style="flex: 1; font-size: 12px; font-family: monospace;"></select>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <button id="batchModesAll"  type="button" style="font-size: 11px;">Select all</button>
+            <button id="batchModesNone" type="button" style="font-size: 11px;">Clear</button>
+            <span class="muted" style="font-size: 11px;">pick 3–5 to compare</span>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 6px;">
+          <label class="raw-json-check" title="Ignore the picker above and render every mode (~20 min for all 31)">
+            <input type="checkbox" id="batchAll"> Render EVERY mode (~20 min)
+          </label>
+          <label class="raw-json-check" title="Mute bgMusic for the batch so video differences are clearer">
+            <input type="checkbox" id="batchSilent"> 🔇 Silent
+          </label>
+          <button id="batchGoBtn" class="primary">Render batch</button>
+          <button id="batchStopBtn" disabled>Stop</button>
+        </div>
+        <div id="batchStatus" class="muted" style="font-size: 12px; padding-top: 4px;"></div>
+      </div>
     </div>
   </details>
 
@@ -987,6 +1013,129 @@ $('pdfGoBtn')?.addEventListener('click', async () => {
   } catch (e) { $('galleryStatus').textContent = '✗ ' + e.message; }
   finally { btn.disabled = false; }
 });
+
+// Populate the batch-modes multi-select from the single-mode <select>. Keeps
+// labels intact (including optgroup headings as disabled entries for context).
+(function populateBatchModes() {
+  const src = $('videoStyle');
+  const dst = $('batchModes');
+  if (!src || !dst) return;
+  dst.innerHTML = '';
+  for (const node of src.children) {
+    if (node.tagName === 'OPTGROUP') {
+      const header = document.createElement('option');
+      header.textContent = '── ' + node.label + ' ──';
+      header.disabled = true;
+      dst.appendChild(header);
+      for (const opt of node.children) {
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.textContent;
+        dst.appendChild(o);
+      }
+    } else if (node.tagName === 'OPTION') {
+      dst.appendChild(node.cloneNode(true));
+    }
+  }
+})();
+
+$('batchModesAll') ?.addEventListener('click', () => {
+  [...$('batchModes').options].forEach((o) => { if (!o.disabled) o.selected = true; });
+});
+$('batchModesNone')?.addEventListener('click', () => {
+  [...$('batchModes').options].forEach((o) => o.selected = false);
+});
+
+// Cancel the batch poll interval when the page unloads.
+let batchPollTimer = null;
+function stopBatchPolling() { if (batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; } }
+
+function setBatchRunningUi(running) {
+  $('batchGoBtn').disabled   = running;
+  $('videoGoBtn').disabled   = running;       // block single while batch runs
+  $('batchStopBtn').disabled = !running;
+  $('batchAll').disabled     = running;
+  $('batchModes').disabled   = running;
+  $('batchSilent').disabled  = running;
+}
+
+async function pollBatchStatus() {
+  try {
+    const s = await (await fetch('/api/export/video/batch/status')).json();
+    if (!s.running) {
+      // finished
+      setBatchRunningUi(false);
+      stopBatchPolling();
+      const failNote = s.failed > 0 ? ` · ${s.failed} failed` : '';
+      const stopNote = s.stopRequested ? ' (stopped)' : '';
+      const compareHref = s.runName ? `/videos/${encodeURIComponent(s.runName)}/compare.html` : null;
+      $('batchStatus').innerHTML =
+        `✓ Batch done — ${s.done}/${s.total} ok${failNote}${stopNote} · ` +
+        (compareHref
+          ? `<a href="${compareHref}" target="_blank" style="color: var(--accent);">open compare.html ↗</a>`
+          : '(no output)');
+      return;
+    }
+    const idx = s.total - s.remaining;
+    const elapsed = Math.round(s.elapsedMs / 1000);
+    const avg = s.done > 0 ? Math.round(s.elapsedMs / s.done / 1000) : null;
+    const eta = avg ? `  · ETA ~${Math.round((s.remaining + 1) * avg)}s` : '';
+    $('batchStatus').innerHTML = `Rendering <b>${idx}/${s.total}</b> · <code>${s.current || '…'}</code>` +
+      `  (done ${s.done}, failed ${s.failed}, elapsed ${elapsed}s${eta})`;
+  } catch (e) {
+    $('batchStatus').textContent = '✗ status poll failed: ' + e.message;
+  }
+}
+
+$('batchGoBtn')?.addEventListener('click', async () => {
+  const app   = $('videoApp').value;
+  const shots = [...$('videoShots').selectedOptions].map((o) => o.value);
+  if (!shots.length && !app) { alert('Pick some screenshots or an app folder (use the field above).'); return; }
+  const renderAll = $('batchAll').checked;
+  const modes = renderAll ? [] : [...$('batchModes').selectedOptions].filter((o) => !o.disabled).map((o) => o.value);
+  if (!renderAll && !modes.length) { alert('Pick at least one mode (or tick "Render EVERY mode").'); return; }
+  const body = {
+    app,
+    shots:     shots.length ? shots : undefined,
+    title:     $('videoTitle')?.value || '',
+    format:    $('videoFormat').value,
+    frameMs:   Number($('videoFrameMs').value) || 2500,
+    watermark: $('videoWatermark').value,
+    silent:    $('batchSilent').checked,
+    ...(renderAll ? { all: true } : { modes }),
+  };
+  setBatchRunningUi(true);
+  $('batchStatus').textContent = 'Starting batch…';
+  try {
+    const r = await postJson('/api/export/video/batch', body);
+    $('batchStatus').textContent = `Starting: ${r.total} mode(s) into videos/${r.runName}/ …`;
+    // poll every 2s — a typical mode render is 30-60s so no need to hammer
+    stopBatchPolling();
+    batchPollTimer = setInterval(pollBatchStatus, 2000);
+    pollBatchStatus();
+  } catch (e) {
+    setBatchRunningUi(false);
+    $('batchStatus').textContent = '✗ ' + e.message;
+  }
+});
+
+$('batchStopBtn')?.addEventListener('click', async () => {
+  $('batchStopBtn').disabled = true;
+  $('batchStatus').textContent = 'Stop requested — will finish current mode then exit…';
+  try { await fetch('/api/export/video/batch/stop', { method: 'POST' }); } catch {}
+});
+
+// If a batch was already running when the page loaded, pick up polling.
+(async () => {
+  try {
+    const s = await (await fetch('/api/export/video/batch/status')).json();
+    if (s.running) {
+      setBatchRunningUi(true);
+      batchPollTimer = setInterval(pollBatchStatus, 2000);
+      pollBatchStatus();
+    }
+  } catch {}
+})();
 
 $('videoGoBtn')?.addEventListener('click', async () => {
   const app = $('videoApp').value;

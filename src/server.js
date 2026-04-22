@@ -71,6 +71,34 @@ function pushHistory(kind, url) {
   saveHistory(h);
 }
 
+// --- video batch state ------------------------------------------------------
+// Sequential multi-mode renders: same shots + format, different style per
+// render. Populated by POST /api/export/video/batch, read by the progress
+// polling endpoint, mutated by /stop.
+const videoBatch = {
+  running:       false,
+  runName:       null,
+  runDir:        null,
+  modes:         [],        // remaining modes to render (drained as we go)
+  total:         0,
+  done:          [],        // [{ mode, webm, mp4?, ms }]
+  failed:        [],        // [{ mode, error }]
+  current:       null,      // currently-rendering mode name
+  startedAt:     null,
+  modeStartedAt: null,
+  stopRequested: false,
+  transcodes:    [],        // pending ffmpeg promises, awaited at end
+};
+
+function resetVideoBatch() {
+  Object.assign(videoBatch, {
+    running: false, runName: null, runDir: null,
+    modes: [], total: 0, done: [], failed: [], current: null,
+    startedAt: null, modeStartedAt: null, stopRequested: false,
+    transcodes: [],
+  });
+}
+
 // --- manual session state ---------------------------------------------------
 // A persistent headful Playwright page the user drives themselves; each
 // /api/manual/snapshot call captures the page's current state. Closes when
@@ -292,6 +320,85 @@ function readBody(req) {
   });
 }
 
+// Render one slideshow video. Pure function — no dependency on req/res, used
+// both by the single-mode /api/export/video endpoint and the batch loop.
+// Returns { ok, webm, mp4?, ms } on success or { error } on failure.
+// mp4Promise (ffmpeg transcode) runs in the background — push the returned
+// promise onto videoBatch.transcodes and resolve it later.
+async function renderOneVideoMode({ shotPaths, fmt, frameMs, fps, watermark, style, bgMusic, outDir, baseName, silent }) {
+  const cfg = {
+    fps,
+    watermark: watermark || '',
+    style:     style     || 'minimal',
+    bgMusic:   silent ? '' : (bgMusic || ''),
+    frames: shotPaths.map((rel) => {
+      const abs = safeJoin(SHOTS, rel);
+      let meta = {};
+      const sidecar = abs.replace(/\.[^.]+$/, '.json');
+      if (fs.existsSync(sidecar)) { try { meta = JSON.parse(fs.readFileSync(sidecar, 'utf8')); } catch {} }
+      return {
+        img: '/screenshots/' + rel.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/'),
+        caption: meta.caption || '',
+        note:    meta.note    || '',
+        durationMs: frameMs,
+      };
+    }),
+  };
+  const webmOut = path.join(outDir, `${baseName}.webm`);
+  const startedAt = Date.now();
+  try {
+    const { chromium } = require('playwright');
+    const q = encodeURIComponent(JSON.stringify(cfg));
+    const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+    const ctx = await browser.newContext({
+      viewport: { width: fmt.w, height: fmt.h },
+      deviceScaleFactor: 2,
+      recordVideo: { dir: outDir, size: { width: fmt.w, height: fmt.h } },
+    });
+    const page = await ctx.newPage();
+    await page.goto(`http://localhost:${ACTIVE_PORT}/slideshow.html?config=${q}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction('window.__slideshowReady === true', null, { timeout: 60000 });
+    const duration = await page.evaluate('window.__slideshowDurationMs');
+    await page.evaluate('window.__slideshowStart = true');
+    await page.waitForFunction('window.__slideshowDone === true', null, { timeout: duration + 10000 });
+    const video = page.video();
+    await page.close();
+    const tempPath = await video.path();
+    await ctx.close();
+    await browser.close();
+    fs.renameSync(tempPath, webmOut);
+    // Fire ffmpeg transcode in the background — do NOT await, so the caller
+    // can move on to the next render immediately. Caller collects the Promise.
+    const mp4Out = webmOut.replace(/\.webm$/, '.mp4');
+    const mp4Promise = new Promise((resolve) => {
+      const ff = spawn('ffmpeg', [
+        '-y', '-i', webmOut,
+        '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
+        '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+        mp4Out,
+      ], { stdio: 'ignore' });
+      ff.on('error', () => resolve({ ok: false }));
+      ff.on('exit', (code) => resolve({ ok: code === 0, path: mp4Out }));
+    });
+    return { ok: true, webm: webmOut, mp4Promise, ms: Date.now() - startedAt };
+  } catch (e) {
+    return { error: e.message, ms: Date.now() - startedAt };
+  }
+}
+
+// All video mode values that appear in the UI <select>. Kept in sync with
+// web/ui.html's optgroups — add new modes in both places.
+const ALL_VIDEO_MODES = [
+  // Minimal
+  'minimal','dynamic','3d','cinematic','documentary','museum','magazine','paper',
+  // Tech/Dev
+  'hacker','maker','anonymous','terminal','cyberpunk','oscilloscope','blueprint','neon-outline',
+  // Space/Science
+  'nasa','cosmos','starfield','nebula','wormhole','satellite','particle','lab-notebook','radar',
+  // Retro/Art
+  'retro-80s','vhs','film-noir','polaroid','chalkboard','comic','holographic',
+];
+
 // Accept only http(s) URLs — reject javascript:, file:, data:, etc. before
 // they ever reach the spawned crawler / headful Playwright page.
 function isSafeHttpUrl(s) {
@@ -300,6 +407,13 @@ function isSafeHttpUrl(s) {
     const u = new URL(s);
     return u.protocol === 'http:' || u.protocol === 'https:';
   } catch { return false; }
+}
+
+// Escape HTML for safe embedding in server-generated pages (compare.html etc).
+function escapeHtmlSafe(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
 
 function json(res, status, obj) {
@@ -1067,6 +1181,158 @@ const server = http.createServer(async (req, res) => {
         await browser.close();
         return json(res, 200, { ok: true, file: `galleries/${run}/gallery.pdf` });
       } catch (e) { return json(res, 500, { error: 'PDF export failed: ' + e.message }); }
+    }
+
+    // GET /api/export/video/batch/status
+    // Poll this to drive the batch progress UI — cheap, no side effects.
+    if (pathname === '/api/export/video/batch/status' && req.method === 'GET') {
+      return json(res, 200, {
+        running:   videoBatch.running,
+        runName:   videoBatch.runName,
+        current:   videoBatch.current,
+        done:      videoBatch.done.length,
+        failed:    videoBatch.failed.length,
+        total:     videoBatch.total,
+        remaining: videoBatch.modes.length,
+        stopRequested: videoBatch.stopRequested,
+        elapsedMs: videoBatch.startedAt ? Date.now() - videoBatch.startedAt : 0,
+        doneList:   videoBatch.done.map((d) => ({ mode: d.mode, ms: d.ms })),
+        failedList: videoBatch.failed,
+      });
+    }
+    if (pathname === '/api/export/video/batch/stop' && req.method === 'POST') {
+      if (!videoBatch.running) return json(res, 200, { ok: true, nothing: true });
+      videoBatch.stopRequested = true;
+      return json(res, 200, { ok: true });
+    }
+
+    // POST /api/export/video/batch
+    // body: { modes?: ['minimal','nasa',...], all?: bool, silent?: bool, ...same shape as single export (shots/app/format/frameMs/fps/watermark/title/bgMusic) }
+    // Renders each mode sequentially into one run folder, then emits a
+    // compare.html grid and batch.json summary.
+    if (pathname === '/api/export/video/batch' && req.method === 'POST') {
+      if (videoBatch.running) return json(res, 409, { error: 'a batch render is already running' });
+      const body = await readBody(req);
+      // Resolve modes
+      let modes;
+      if (body.all === true) modes = [...ALL_VIDEO_MODES];
+      else if (Array.isArray(body.modes) && body.modes.length) {
+        modes = body.modes.filter((m) => ALL_VIDEO_MODES.includes(m));
+      } else {
+        return json(res, 400, { error: 'modes[] or all:true required' });
+      }
+      if (!modes.length) return json(res, 400, { error: 'no valid modes selected' });
+      // Resolve shots (shared across modes)
+      const fmt = VIDEO_FORMATS[body.format] || VIDEO_FORMATS.reel;
+      let shotPaths = [];
+      let outApp = '';
+      if (Array.isArray(body.shots) && body.shots.length) {
+        shotPaths = body.shots.map(String).filter((s) => safeJoin(SHOTS, s) && fs.existsSync(safeJoin(SHOTS, s)));
+        if (!shotPaths.length) return json(res, 400, { error: 'no valid shots in selection' });
+        outApp = shotPaths[0].split(/[\\/]/)[0] || 'manual';
+      } else {
+        const app = String(body.app || '').replace(/[^\w.-]/g, '');
+        if (!app) return json(res, 400, { error: 'shots[] or app required' });
+        const dir = path.join(SHOTS, app);
+        if (!fs.existsSync(dir)) return json(res, 404, { error: 'app folder not found' });
+        const files = fs.readdirSync(dir).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort();
+        if (!files.length) return json(res, 400, { error: 'no screenshots to export' });
+        shotPaths = files.map((f) => `${app}/${f}`);
+        outApp = app;
+      }
+      // Set up the run folder
+      const runName = slugName(body.title || outApp) + '_batch_' + stamp();
+      const runDir  = path.join(VIDEOS, runName);
+      fs.mkdirSync(runDir, { recursive: true });
+      const errDir = path.join(runDir, 'errors');
+      // Prime batch state and kick off the loop in the background. Respond
+      // immediately — caller polls /batch/status for progress.
+      resetVideoBatch();
+      Object.assign(videoBatch, {
+        running: true, runName, runDir,
+        modes: [...modes], total: modes.length,
+        startedAt: Date.now(),
+      });
+      (async () => {
+        try {
+          while (videoBatch.modes.length && !videoBatch.stopRequested) {
+            const mode = videoBatch.modes.shift();
+            videoBatch.current = mode;
+            videoBatch.modeStartedAt = Date.now();
+            const base = `video-${slugName(mode)}`;
+            const r = await renderOneVideoMode({
+              shotPaths, fmt,
+              frameMs:   Number(body.frameMs || 2500),
+              fps:       Number(body.fps || 30),
+              watermark: body.watermark || '',
+              style:     mode,
+              bgMusic:   body.bgMusic || '',
+              outDir:    runDir,
+              baseName:  base,
+              silent:    !!body.silent,
+            });
+            if (r.ok) {
+              videoBatch.done.push({ mode, webm: `${base}.webm`, ms: r.ms });
+              // collect transcode promise; attach mode so we can link mp4 later
+              videoBatch.transcodes.push(r.mp4Promise.then((mp4) => ({ mode, ...mp4 })));
+            } else {
+              videoBatch.failed.push({ mode, error: r.error });
+              try {
+                fs.mkdirSync(errDir, { recursive: true });
+                fs.writeFileSync(path.join(errDir, `${slugName(mode)}.txt`), r.error || 'unknown error');
+              } catch {}
+            }
+          }
+          // drain transcodes (fire-and-forget while we were rendering)
+          const transcodeResults = await Promise.all(videoBatch.transcodes);
+          // attach mp4 names to done entries
+          for (const tr of transcodeResults) {
+            const d = videoBatch.done.find((x) => x.mode === tr.mode);
+            if (d && tr.ok) d.mp4 = `video-${slugName(tr.mode)}.mp4`;
+          }
+          // batch.json summary
+          fs.writeFileSync(path.join(runDir, 'batch.json'), JSON.stringify({
+            title: body.title || '', app: outApp, format: body.format, fmt, fps: Number(body.fps || 30),
+            frameMs: Number(body.frameMs || 2500), watermark: body.watermark || '', silent: !!body.silent,
+            ts: Date.now(), modes, done: videoBatch.done, failed: videoBatch.failed,
+            stopped: videoBatch.stopRequested, elapsedMs: Date.now() - videoBatch.startedAt,
+            sources: shotPaths,
+          }, null, 2));
+          // compare.html — grid of all successful renders, autoplay muted loop
+          try {
+            const tiles = videoBatch.done.map((d) => {
+              const src = d.mp4 || d.webm;
+              return `<figure><video src="${src}" autoplay muted loop playsinline></video><figcaption>${escapeHtmlSafe(d.mode)}</figcaption></figure>`;
+            }).join('\n    ');
+            const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>video modes — ${escapeHtmlSafe(runName)}</title>
+<style>
+  html,body{margin:0;background:#0f1419;color:#e6edf3;font:13px/1.4 system-ui,sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid #30363d;}
+  header h1{margin:0;font-size:18px;} header p{margin:4px 0 0;color:#8b949e;font-size:12px;}
+  main{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:20px;}
+  figure{margin:0;background:#161b22;border:1px solid #30363d;border-radius:6px;overflow:hidden;}
+  figure video{width:100%;display:block;background:#000;}
+  figcaption{padding:6px 10px;color:#58a6ff;font-family:monospace;font-size:12px;border-top:1px solid #30363d;}
+</style></head>
+<body>
+  <header>
+    <h1>video modes — ${escapeHtmlSafe(body.title || outApp)}</h1>
+    <p>${videoBatch.done.length} ok · ${videoBatch.failed.length} failed · ${fmt.w}×${fmt.h} · ${shotPaths.length} frame(s) · rendered ${new Date().toISOString()}</p>
+  </header>
+  <main>
+    ${tiles}
+  </main>
+</body></html>`;
+            fs.writeFileSync(path.join(runDir, 'compare.html'), html);
+          } catch (e) { console.error('compare.html write failed:', e.message); }
+        } catch (e) {
+          videoBatch.failed.push({ mode: videoBatch.current || '(batch)', error: e.message });
+        } finally {
+          videoBatch.running = false;
+          videoBatch.current = null;
+        }
+      })();
+      return json(res, 202, { ok: true, runName, total: modes.length });
     }
 
     // POST /api/export/video

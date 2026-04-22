@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>route-shot · todo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161b22; --ink: #e6edf3; --mute: #8b949e;
+    --accent: #58a6ff; --good: #3fb950; --warn: #d29922; --bad: #f85149;
+    --code-bg: #0d1117; --border: #30363d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 24px 20px 80px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 22px;
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; }
+  h2 { margin: 28px 0 10px; font-size: 15px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: baseline; }
+  h2 .count { color: var(--mute); font-size: 12px; font-weight: normal; letter-spacing: 0; text-transform: none; }
+  .progress { margin-left: auto; color: var(--mute); font-size: 13px; font-weight: normal;
+    letter-spacing: 0; text-transform: none; }
+  .progress strong { color: var(--good); }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+    font: 12px/1 "Cascadia Mono", Consolas, monospace; color: #ffa657; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 6px 0; border-bottom: 1px solid var(--border); display: grid;
+    grid-template-columns: 22px 1fr; gap: 10px; align-items: flex-start; }
+  li:last-child { border-bottom: 0; }
+  li .chk { padding-top: 2px; }
+  li .chk input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--good); }
+  li .body { line-height: 1.45; }
+  li.done .body { opacity: 0.45; text-decoration: line-through; }
+  li .tag { display: inline-block; font-size: 10px; padding: 1px 6px;
+    border-radius: 3px; margin-right: 6px; vertical-align: middle; letter-spacing: 0.5px; }
+  .tag.crit   { background: #2b0f0e; color: var(--bad);    border: 1px solid #5a1f1d; }
+  .tag.bug    { background: #2d2208; color: var(--warn);   border: 1px solid #5a3a0a; }
+  .tag.sec    { background: #1a1a3a; color: #a0a0ff;       border: 1px solid #3a3a6a; }
+  .tag.dead   { background: #1a1a1a; color: var(--mute);   border: 1px solid #3a3a3a; }
+  .tag.style  { background: #1a2a2a; color: #7fc7c7;       border: 1px solid #3a5a5a; }
+  .tag.perf   { background: #1a3a1a; color: #7fc77f;       border: 1px solid #3a5a3a; }
+  .tag.ux     { background: #3a1a3a; color: #c77fc7;       border: 1px solid #5a3a5a; }
+  .tag.docs   { background: #2a1a0a; color: #c7a77f;       border: 1px solid #5a3a1a; }
+  .toolbar { margin: 10px 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .toolbar button { background: var(--bg); color: var(--ink); border: 1px solid var(--border);
+    padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .toolbar button:hover { border-color: var(--accent); }
+  .toolbar button.active { background: var(--panel); border-color: var(--accent); color: var(--accent); }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--border);
+    color: var(--mute); font-size: 12px; }
+  .legend { font-size: 11px; color: var(--mute); margin: 4px 0 14px; }
+  .legend .tag { font-size: 9px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>route-shot · todo</h1>
+  <span class="progress" id="progress">0/0 done</span>
+</header>
+
+<div class="legend">
+  <span class="tag crit">CRIT</span> blocker ·
+  <span class="tag bug">BUG</span> real but rare ·
+  <span class="tag sec">SEC</span> security ·
+  <span class="tag dead">DEAD</span> dead / stale ·
+  <span class="tag style">INC</span> inconsistency ·
+  <span class="tag perf">PERF</span> memory / perf ·
+  <span class="tag ux">UX</span> papercut ·
+  <span class="tag docs">DOC</span> docs drift
+</div>
+
+<div class="toolbar">
+  <button data-filter="all" class="active">All</button>
+  <button data-filter="crit">Critical only</button>
+  <button data-filter="bug">Bugs</button>
+  <button data-filter="sec">Security</button>
+  <button data-filter="perf">Perf</button>
+  <button data-filter="ux">UX</button>
+  <button data-filter="todo">Not done</button>
+  <button id="reset" style="margin-left:auto; color: var(--bad);">Reset checks</button>
+</div>
+
+<h2>Immediate <span class="count">(the one you flagged)</span></h2>
+<ul class="todo-list">
+  <li data-tags="bug ux"><label class="chk"><input type="checkbox"></label>
+    <div class="body"><span class="tag bug">BUG</span><span class="tag ux">UX</span>
+      Floating 📸 widget appears inside manual screenshots — <code>page.screenshot()</code> captures it.
+      Fix: hide widget via <code>page.evaluate</code> before screenshot, restore after.</div></li>
+</ul>
+
+<h2>Critical <span class="count">(fix next)</span></h2>
+<ul class="todo-list">
+  <li data-tags="crit"><label class="chk"><input type="checkbox"></label>
+    <div class="body"><span class="tag crit">CRIT</span>
+      <code>src/server.js</code> — <code>ACTIVE_PORT</code> declared after <code>listenWithFallback()</code>.
+      Any export request during startup produces <code>http://localhost:undefined/…</code> and hangs.
+      Move declaration before the listen call.</div></li>
+  <li data-tags="bug"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag bug">BUG</span>
+      <code>src/route-shot.js</code> — <code>cfg._skipNextGoto</code> leaks between apps in a multi-app batch
+      if preSteps throw before the flag is consumed. Reset it at the start of every <code>crawlApp</code>.</div></li>
+  <li data-tags="bug"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag bug">BUG</span>
+      <code>src/server.js</code> — <code>/api/import-recording</code> leaks temp files if the main
+      process crashes between spawn and child exit. Write to a proper tmp dir with <code>process.on('exit')</code> cleanup.</div></li>
+  <li data-tags="bug"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag bug">BUG</span>
+      <code>src/server.js</code> — <code>drainManualQueue</code> doesn't detect a closed Chromium window;
+      next poll throws silently. Catch <code>page.isClosed()</code> and call <code>manualStop()</code>.</div></li>
+  <li data-tags="bug"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag bug">BUG</span>
+      <code>src/server.js</code> — <code>rmrf()</code> uses sync <code>lstatSync</code> in a walk;
+      if a file disappears mid-walk it throws and cleanup stops. Wrap each iteration in try/catch.</div></li>
+  <li data-tags="bug"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag bug">BUG</span>
+      <code>src/route-shot.js</code> — depth-mode path replay fails silently when a button's label
+      changes after the first click (e.g. toggle). Log a structured warning so the missing variant is visible.</div></li>
+  <li data-tags="bug ux"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag bug">BUG</span><span class="tag ux">UX</span>
+      <code>web/ui.html</code> — <em>Format JSON</em> button marks editor dirty even when no diff.
+      Only set dirty if formatted text differs from the pre-format text.</div></li>
+</ul>
+
+<h2>Security <span class="count">(defense-in-depth)</span></h2>
+<ul class="todo-list">
+  <li data-tags="sec"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag sec">SEC</span>
+      <code>web/ui.html</code> — ~10 <code>.innerHTML</code> assignments construct HTML by concatenation.
+      <code>escapeHtml</code> is used in most but not all paths. Replace with <code>textContent</code> +
+      DOM methods, or route every template through one helper.</div></li>
+  <li data-tags="sec"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag sec">SEC</span>
+      <code>src/server.js</code> — <code>/api/export/promo</code> embeds filenames in generated HTML.
+      A crafted filename like <code>&lt;img onerror=…&gt;.png</code> would execute. Encode filenames before embedding.</div></li>
+  <li data-tags="sec"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag sec">SEC</span>
+      Dashboard binds only on localhost but if an admin changes the bind to 0.0.0.0 for LAN testing,
+      apps.json + screenshots become world-readable. Add an env-var guarded bind + a prominent LAN warning.</div></li>
+</ul>
+
+<h2>Dead / stale <span class="count">(safe cleanup)</span></h2>
+<ul class="todo-list">
+  <li data-tags="dead"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag dead">DEAD</span>
+      <code>src/route-shot.js:20</code> — <code>chromium</code> import not used in this file.</div></li>
+  <li data-tags="dead"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag dead">DEAD</span>
+      <code>src/server.js:21</code> — <code>EXPORTS_SUBDIR</code> constant unused.</div></li>
+  <li data-tags="dead"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag dead">DEAD</span>
+      <code>web/ui.html</code> — back-compat shim for old <code>openSections</code> localStorage format
+      is vestigial now that <code>detailsState</code> is the primary. Drop after one release cycle.</div></li>
+  <li data-tags="dead"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag dead">DEAD</span>
+      <code>web/ui.html</code> — <code>typeof updatePresetHint === 'function'</code> defensive check
+      masks missing-function bugs. Either guarantee the function exists or assert it.</div></li>
+</ul>
+
+<h2>Inconsistencies <span class="count">(rough edges)</span></h2>
+<ul class="todo-list">
+  <li data-tags="style"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag style">INC</span>
+      <code>CLICK_WAIT</code> / <code>clickWait</code> configurable via env + JSON but not in the form editor.
+      Expose it as a field in the <em>Timing &amp; debug</em> section.</div></li>
+  <li data-tags="style"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag style">INC</span>
+      <code>new URL(cfg.url).origin</code> not wrapped in try/catch in <code>route-shot.js</code>.
+      Server validates with <code>isSafeHttpUrl</code>. Align both to the same validator.</div></li>
+  <li data-tags="style"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag style">INC</span>
+      <code>loadHistory</code> gracefully handles corrupt files; <code>pushHistory</code> silently creates
+      arrays for unknown kinds. Validate kind against <code>{runs, scans}</code>.</div></li>
+  <li data-tags="style"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag style">INC</span>
+      <code>menu.sh</code> static-server default <b>8000</b> vs dashboard default <b>8080</b> — easy to confuse.
+      Document both, or rename one.</div></li>
+</ul>
+
+<h2>Performance / memory <span class="count">(slow leaks)</span></h2>
+<ul class="todo-list">
+  <li data-tags="perf"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag perf">PERF</span>
+      <code>run.logs</code> grows to 5000 entries before truncation; no per-line size limit.
+      Cap each entry to ~2KB + truncate with <code>…</code>.</div></li>
+  <li data-tags="perf"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag perf">PERF</span>
+      <code>setInterval(pollLogs, 800)</code> + <code>setInterval(refreshManualStatus, 2000)</code> never cleared.
+      Multiple dashboard tabs multiply the load. Add <code>visibilitychange</code> to pause when hidden.</div></li>
+  <li data-tags="perf"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag perf">PERF</span>
+      Scan picker's click-outside listener can accumulate on rapid open/close.
+      Track the handler and <code>removeEventListener</code> unconditionally on close.</div></li>
+  <li data-tags="perf"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag perf">PERF</span>
+      <code>drainManualQueue</code> interval not guarded against exception-before-store; cleanup misses on error.
+      Set the handle first, then await the heavy init.</div></li>
+</ul>
+
+<h2>UX papercuts <span class="count">(small wins)</span></h2>
+<ul class="todo-list">
+  <li data-tags="ux"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag ux">UX</span>
+      Scan table with &gt;100 rows (bit-playground is 127) is unwieldy. Add pagination OR virtualize
+      the scroll container.</div></li>
+  <li data-tags="ux"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag ux">UX</span>
+      Form editor vs raw JSON editor: switching without saving silently discards form changes.
+      Add an unsaved-changes warning on section-switch.</div></li>
+  <li data-tags="ux"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag ux">UX</span>
+      &quot;Recent runs&quot; drop-toggle collapsed by default — many users never discover it.
+      Show the top 3 as always-visible chips, rest inside the toggle.</div></li>
+  <li data-tags="ux"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag ux">UX</span>
+      URL-mirror between Run and Scan is silent. Add a small link-icon + tooltip saying
+      &quot;Mirrored — type in either&quot;.</div></li>
+</ul>
+
+<h2>Docs drift <span class="count">(prose catches up)</span></h2>
+<ul class="todo-list">
+  <li data-tags="docs"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag docs">DOC</span>
+      <code>README.md</code> CLI examples predate <code>--preset</code>, <code>--dry-run</code>,
+      <code>--import-recording</code>. Add a flags section.</div></li>
+  <li data-tags="docs"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag docs">DOC</span>
+      <code>userguide.html</code> doesn't mention the dashboard at all — written before it existed.
+      Add a &quot;Dashboard tour&quot; section.</div></li>
+  <li data-tags="docs"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag docs">DOC</span>
+      <code>package.json</code> <code>files[]</code> doesn't include <code>presets/*.json</code> — npm-publishing
+      would ship without them.</div></li>
+  <li data-tags="docs"><span class="chk"><input type="checkbox"></span>
+    <div class="body"><span class="tag docs">DOC</span>
+      <code>menu.sh</code> default ports (static=8000, dashboard=8080) not mentioned anywhere.</div></li>
+</ul>
+
+<footer>
+  Generated from a deep review on 2026-04-22 · <a href="https://github.com/abourdim/route-shot">github</a>
+</footer>
+
+</div>
+<script>
+const KEY = 'route-shot.todo.v1';
+const boxes = () => document.querySelectorAll('li input[type=checkbox]');
+const lis   = () => document.querySelectorAll('li[data-tags]');
+
+function save() {
+  const state = {};
+  boxes().forEach((c, i) => { if (c.checked) state[i] = true; });
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  updateProgress();
+  applyFilter(currentFilter);
+}
+function load() {
+  let state = {}; try { state = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+  boxes().forEach((c, i) => {
+    c.checked = !!state[i];
+    c.closest('li').classList.toggle('done', c.checked);
+  });
+  updateProgress();
+}
+function updateProgress() {
+  const all = boxes().length;
+  const done = [...boxes()].filter((c) => c.checked).length;
+  document.getElementById('progress').innerHTML = `<strong>${done}</strong>/${all} done`;
+}
+
+boxes().forEach((c) => c.addEventListener('change', (e) => {
+  e.target.closest('li').classList.toggle('done', e.target.checked);
+  save();
+}));
+
+let currentFilter = 'all';
+function applyFilter(f) {
+  currentFilter = f;
+  lis().forEach((li) => {
+    const tags = li.dataset.tags.split(' ');
+    const done = li.classList.contains('done');
+    let show = false;
+    if (f === 'all') show = true;
+    else if (f === 'todo') show = !done;
+    else show = tags.includes(f);
+    li.style.display = show ? '' : 'none';
+  });
+  document.querySelectorAll('.toolbar button[data-filter]').forEach((b) =>
+    b.classList.toggle('active', b.dataset.filter === f));
+}
+document.querySelectorAll('.toolbar button[data-filter]').forEach((b) =>
+  b.addEventListener('click', () => applyFilter(b.dataset.filter)));
+
+document.getElementById('reset').onclick = () => {
+  if (!confirm('Reset every checkbox?')) return;
+  localStorage.removeItem(KEY);
+  load();
+};
+
+load();
+</script>
+</body>
+</html>
