@@ -983,7 +983,7 @@ function renderForm() {
     r.style.display = 'grid';
     r.style.gridTemplateColumns = '120px 1fr 1fr 24px';
     r.style.gap = '4px';
-    const a = sel(step.action || 'click', ['click', 'fill', 'press', 'goto', 'waitForSelector', 'waitForURL', 'wait', 'pause']);
+    const a = sel(step.action || 'click', ['click', 'fill', 'press', 'selectOption', 'goto', 'waitForSelector', 'waitForURL', 'wait', 'pause', 'evaluate']);
     const s = inp(step.selector || '', 'selector (e.g. #email or button:has-text("Sign in"))');
     s.setAttribute('list', 'scannedSelectors');
     const v = inp(step.value ?? '', '');
@@ -997,6 +997,8 @@ function renderForm() {
         waitForURL: 'URL pattern (**/dashboard)',
         wait: 'milliseconds (e.g. 1000)',
         pause: 'message shown when waiting (optional)',
+        selectOption: 'option value (e.g. test1)',
+        evaluate: 'JS expression (e.g. localStorage.setItem("x","y"))',
       };
       v.placeholder = placeholders[a.value] || '';
     };

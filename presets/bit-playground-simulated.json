@@ -1,0 +1,27 @@
+{
+  "_description": "bit-playground WITHOUT a physical micro:bit — uses the app's built-in Test mode 1 simulator to generate fake sensor data. Switches to expert mode, opens the Others tab, picks the simulator, then snapshots all 6 tabs with live-looking values.",
+  "apps": [
+    {
+      "name": "bit-playground-simulated",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "preSteps": [
+        { "action": "click",        "selector": "#expertModeBtn" },
+        { "action": "click",        "selector": "#othersTabBtn" },
+        { "action": "selectOption", "selector": "#otherModeSelect", "value": "test1" },
+        { "action": "wait",         "value": 1500 }
+      ],
+      "clickMode": "sequential",
+      "clickWait": 1500,
+      "maxPages": 1,
+      "clicks": [
+        "#controlsTabBtn",
+        "#sensesTabBtn",
+        "#servosTabBtn",
+        "#gamepadTabBtn",
+        "#graphTabBtn",
+        "#board3dTabBtn"
+      ]
+    }
+  ]
+}

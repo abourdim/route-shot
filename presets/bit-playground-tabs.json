@@ -1,0 +1,20 @@
+{
+  "_description": "bit-playground tabs WITHOUT hardware pairing — same 6 tab snapshots as the connected preset, but headless and no pause. Use when you just want the UI tour, not the live device data.",
+  "apps": [
+    {
+      "name": "bit-playground-tabs",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "clickMode": "sequential",
+      "maxPages": 1,
+      "clicks": [
+        "#controlsTabBtn",
+        "#sensesTabBtn",
+        "#servosTabBtn",
+        "#gamepadTabBtn",
+        "#graphTabBtn",
+        "#board3dTabBtn"
+      ]
+    }
+  ]
+}
