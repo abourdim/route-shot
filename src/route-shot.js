@@ -91,27 +91,35 @@ async function runSteps(page, steps, navTimeout) {
     else if (action === 'waitForURL') await page.waitForURL(step.value || step.url, { timeout: step.timeout || 10000 });
     else if (action === 'wait')       await page.waitForTimeout(Number(step.value || step.ms || 500));
     else if (action === 'pause') {
-      // Halts the run until the user presses Enter — for hardware pairing
+      // Halts the run until the user signals to resume — for hardware pairing
       // (Web Serial / Web Bluetooth permission), OAuth popups, anything that
       // requires a real human click before snapshots can continue.
-      // Only meaningful in headful mode; in headless, log a warning and skip.
-      const msg = step.message || step.value || 'Do whatever you need in the browser, then press Enter to continue…';
-      if (!process.stdout.isTTY || !process.stdin.isTTY) {
+      //
+      // Two unblock channels:
+      //   1) Interactive TTY: press Enter in the terminal
+      //   2) Dashboard / piped: the parent process writes anything to our
+      //      stdin (the server hits /api/pause/resume → proc.stdin.write).
+      // Headless + no parent piping → log a warning and skip (no point).
+      const msg = step.message || step.value || 'Do whatever you need in the browser, then press Enter / click Resume.';
+      const fromDashboard = process.env.ROUTE_SHOT_DASHBOARD === '1';
+      const interactive   = process.stdout.isTTY && process.stdin.isTTY;
+      if (!interactive && !fromDashboard) {
         console.warn(`[pause] non-interactive shell — skipping: ${msg}`);
       } else {
-        process.stdout.write(`\n  ⏸  ${msg}\n  > `);
+        // ⏸ marker is a sentinel the dashboard greps for in stdout
+        process.stdout.write(`\n[pause]⏸ ${msg}\n  > `);
         await new Promise((resolve) => {
           const onData = (b) => {
-            if (b.includes(0x0a) || b.includes(0x0d)) {
+            if (b.length > 0) {
               process.stdin.removeListener('data', onData);
-              process.stdin.pause();
+              try { process.stdin.pause(); } catch {}
               resolve();
             }
           };
           process.stdin.resume();
           process.stdin.on('data', onData);
         });
-        process.stdout.write('  ▶  resuming\n');
+        process.stdout.write('[pause]▶ resuming\n');
       }
     }
     else throw new Error(`unknown preStep action: ${action}`);

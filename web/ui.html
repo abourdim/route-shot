@@ -157,6 +157,14 @@
       <button id="stopBtn" disabled>Stop</button>
       <button id="cleanBtn" class="danger">Clean screenshots</button>
     </div>
+    <div id="pauseBanner" style="display:none; padding: 10px 14px; margin: 8px 0;
+      background: #2d2208; border-left: 3px solid var(--warn); border-radius: 4px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 18px;">⏸</span>
+        <span id="pauseMsg" style="flex: 1;">Paused</span>
+        <button id="resumeBtn" class="primary">Resume ▶</button>
+      </div>
+    </div>
     <div class="logs" id="logs"></div>
   </section>
 
@@ -340,13 +348,22 @@ async function pollLogs() {
     appendLog(r.entries);
     if (r.running) setStatus(true, null);
     else setStatus(false, r.exit);
-    if (!r.running) {
-      // one final refresh of the gallery
-      loadGallery();
+    // pause banner visibility
+    const banner = $('pauseBanner');
+    if (r.paused) {
+      banner.style.display = 'block';
+      $('pauseMsg').textContent = r.pauseMessage || 'Run paused';
+    } else {
+      banner.style.display = 'none';
     }
+    if (!r.running) loadGallery();
   } catch (e) {}
   polling = false;
 }
+
+$('resumeBtn').onclick = async () => {
+  await fetchJSON('/api/resume', { method: 'POST' });
+};
 
 setInterval(pollLogs, 800);
 

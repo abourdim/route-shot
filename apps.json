@@ -1,19 +1,27 @@
 {
+  "_description": "Hardware that needs manual pairing first (micro:bit, Arduino, BLE devices). Headful Chromium opens, you click Connect + pick the device, press Enter in the terminal — then snapshots run. Sequential mode keeps the connection alive across clicks.",
   "apps": [
     {
-      "name": "bit-playground",
+      "name": "bit-playground-connected",
       "url": "https://abourdim.github.io/bit-playground/",
+      "headful": true,
       "dismiss": "button:has-text(\"Let's Go\")",
-      "autoButtons": true,
-      "autoButtonsBlocklist": "🌙|⚡|☁️|🔥|beginner",
-      "maxPages": 1,
       "preSteps": [
         {
-          "action": "click",
-          "selector": "button:has-text(\"expert\")"
+          "action": "pause",
+          "value": "Click Connect, pair your micro:bit, then come back here and press Enter."
         }
       ],
-      "clickMode": "independent"
+      "clickMode": "sequential",
+      "maxPages": 1,
+      "clicks": [
+        "#controlsTabBtn",
+        "#sensesTabBtn",
+        "#servosTabBtn",
+        "#gamepadTabBtn",
+        "#graphTabBtn",
+        "#board3dTabBtn"
+      ]
     }
   ]
 }

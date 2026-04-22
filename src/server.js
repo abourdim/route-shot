@@ -44,10 +44,18 @@ const run = {
   running: false,
   command: null,
   exit:    null,
+  paused:  false,
+  pauseMessage: null,
 };
 
 function pushLog(line) {
-  run.logs.push({ ts: Date.now(), line: String(line).replace(/\r/g, '') });
+  const text = String(line).replace(/\r/g, '');
+  // detect pause / resume sentinels emitted by the crawler so the dashboard
+  // can surface a "Run paused" banner with a Resume button
+  const pauseMatch = text.match(/^\[pause\]⏸\s*(.*)$/);
+  if (pauseMatch) { run.paused = true; run.pauseMessage = pauseMatch[1] || 'Resume when ready'; }
+  if (text.startsWith('[pause]▶')) { run.paused = false; run.pauseMessage = null; }
+  run.logs.push({ ts: Date.now(), line: text });
   if (run.logs.length > 5000) run.logs.splice(0, 1000);
 }
 
@@ -55,15 +63,23 @@ function spawnCrawler(args, label) {
   if (run.running) return { error: 'a run is already in progress' };
   run.logs = [];
   run.running = true;
+  run.paused = false;
+  run.pauseMessage = null;
   run.command = label;
   run.exit = null;
   pushLog(`$ node route-shot.js ${args.join(' ')}`);
-  const proc = spawn(process.execPath, [CRAWLER, ...args], { cwd: ROOT });
+  const proc = spawn(process.execPath, [CRAWLER, ...args], {
+    cwd: ROOT,
+    env: { ...process.env, ROUTE_SHOT_DASHBOARD: '1' },
+    stdio: ['pipe', 'pipe', 'pipe'],   // explicit so stdin is writable for resume
+  });
   proc.stdout.on('data', (d) => d.toString().split('\n').forEach((l) => l && pushLog(l)));
   proc.stderr.on('data', (d) => d.toString().split('\n').forEach((l) => l && pushLog(`[stderr] ${l}`)));
   proc.on('exit', (code) => {
     pushLog(`--- exited with code ${code} ---`);
     run.running = false;
+    run.paused = false;
+    run.pauseMessage = null;
     run.exit = code;
     run.proc = null;
   });
@@ -199,14 +215,21 @@ const server = http.createServer(async (req, res) => {
 
     // API: status
     if (pathname === '/api/status' && req.method === 'GET') {
-      return json(res, 200, { running: run.running, command: run.command, exit: run.exit });
+      return json(res, 200, { running: run.running, command: run.command, exit: run.exit, paused: run.paused, pauseMessage: run.pauseMessage });
+    }
+
+    // resume a paused run by writing a newline to the child's stdin
+    if (pathname === '/api/resume' && req.method === 'POST') {
+      if (!run.proc || !run.paused) return json(res, 200, { ok: true, nothing: true });
+      try { run.proc.stdin.write('\n'); } catch (e) { return json(res, 500, { error: e.message }); }
+      return json(res, 200, { ok: true });
     }
 
     // API: logs (since?=timestamp)
     if (pathname === '/api/logs' && req.method === 'GET') {
       const since = Number(u.searchParams.get('since') || 0);
       const entries = run.logs.filter((l) => l.ts > since);
-      return json(res, 200, { running: run.running, exit: run.exit, entries });
+      return json(res, 200, { running: run.running, exit: run.exit, paused: run.paused, pauseMessage: run.pauseMessage, entries });
     }
 
     // API: read apps.json
