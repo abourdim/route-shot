@@ -274,6 +274,8 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.png':  'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.gif':  'image/gif', '.svg': 'image/svg+xml',
+  '.mp3':  'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+  '.m4a':  'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac',
 };
 
 function serveFile(res, filePath, fallbackType) {
@@ -1275,9 +1277,9 @@ const server = http.createServer(async (req, res) => {
     // preview / browser playback (small 50 MB cap).
     if (pathname.startsWith('/audio/') && req.method === 'GET') {
       const rel = pathname.slice('/audio/'.length);
-      if (!/^(library|uploads|cache)\/[\w.-]+$/.test(rel)) { res.writeHead(400); return res.end(); }
-      const abs = path.join(ROOT, 'audio', rel);
-      if (!abs.startsWith(path.join(ROOT, 'audio') + path.sep)) { res.writeHead(403); return res.end(); }
+      const abs = safeJoin(path.join(ROOT, 'audio'), rel);
+      if (!abs) { res.writeHead(400); return res.end(); }
+      if (!/^(library|uploads|cache)[\\/]/.test(decodeURIComponent(rel))) { res.writeHead(400); return res.end(); }
       return serveFile(res, abs);
     }
 

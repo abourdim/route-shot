@@ -49,3 +49,5 @@ audio/library/*.m4a
 audio/uploads/
 audio/cache/
 !audio/library/README.md
+
+.claude/
