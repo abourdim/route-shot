@@ -1,0 +1,12 @@
+{
+  "_description": "Page with multiple stacked modals/overlays (cookie + welcome + tour + GDPR). Comma-separated dismiss tries each in order, longer dismissWait for animations.",
+  "apps": [
+    {
+      "name": "modal-heavy-site",
+      "url": "https://example.com",
+      "dismiss": "button:has-text(\"Accept all\"), button:has-text(\"I agree\"), button:has-text(\"Got it\"), button:has-text(\"Let's Go\"), button:has-text(\"Skip tour\"), button[aria-label=\"close\"], .modal button.primary",
+      "dismissWait": 800,
+      "maxPages": 1
+    }
+  ]
+}

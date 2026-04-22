@@ -1,0 +1,11 @@
+{
+  "_description": "One hero shot of a marketing/landing page. Dismisses common cookie banners, no clicks, no link-following.",
+  "apps": [
+    {
+      "name": "landing-page",
+      "url": "https://example.com",
+      "dismiss": "button:has-text(\"Accept\"), button:has-text(\"Accept all\"), button:has-text(\"I agree\")",
+      "maxPages": 1
+    }
+  ]
+}

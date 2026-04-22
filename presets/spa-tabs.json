@@ -1,0 +1,18 @@
+{
+  "_description": "Tab-based SPA where each tab is a stable button by ID. List your tab selectors in clicks[]; independent mode = each tab captured fresh from the start state.",
+  "apps": [
+    {
+      "name": "tabbed-app",
+      "url": "http://localhost:3000",
+      "dismiss": "button:has-text(\"Got it\")",
+      "clickMode": "independent",
+      "maxPages": 1,
+      "clicks": [
+        "#tab-overview",
+        "#tab-settings",
+        "#tab-billing",
+        "#tab-help"
+      ]
+    }
+  ]
+}

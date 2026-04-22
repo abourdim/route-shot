@@ -1,0 +1,15 @@
+{
+  "_description": "Debug mode: visible Chromium window, slow waits, only the main page. Use to watch a config behave step-by-step before committing to a full run.",
+  "apps": [
+    {
+      "name": "debug",
+      "url": "http://localhost:3000",
+      "headful": true,
+      "maxPages": 1,
+      "dismissWait": 1500,
+      "clickWait": 1500,
+      "autoButtons": true,
+      "autoButtonsMax": 5
+    }
+  ]
+}

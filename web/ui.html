@@ -1264,13 +1264,34 @@ $('appFormSave').onclick = async () => {
 };
 
 // --- presets ----------------------------------------------------------------
+let presetDescriptions = {};
 async function loadPresets() {
   try {
     const r = await fetchJSON('/api/presets');
+    presetDescriptions = r.descriptions || {};
     const sel = $('presetSelect');
-    sel.innerHTML = (r.presets || []).map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+    sel.innerHTML = (r.presets || []).map((p) => {
+      const d = presetDescriptions[p] || '';
+      return `<option value="${escapeHtml(p)}" title="${escapeHtml(d)}">${escapeHtml(p)}</option>`;
+    }).join('');
     if (!r.presets.length) sel.innerHTML = '<option value="">(no presets yet)</option>';
+    sel.onchange = updatePresetHint;
+    updatePresetHint();
   } catch (e) {}
+}
+
+function updatePresetHint() {
+  let hint = $('presetHint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.id = 'presetHint';
+    hint.className = 'muted';
+    hint.style.fontSize = '11px';
+    hint.style.padding = '4px 6px 0';
+    $('presetSelect').parentNode.parentNode.appendChild(hint);
+  }
+  const name = $('presetSelect').value;
+  hint.textContent = presetDescriptions[name] || '';
 }
 
 $('presetLoad').onclick = async () => {

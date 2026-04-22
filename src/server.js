@@ -218,11 +218,19 @@ const server = http.createServer(async (req, res) => {
     // API: presets list + CRUD
     if (pathname === '/api/presets' && req.method === 'GET') {
       if (!fs.existsSync(PRESETS_DIR)) return json(res, 200, { presets: [] });
-      const names = fs.readdirSync(PRESETS_DIR)
+      const items = fs.readdirSync(PRESETS_DIR)
         .filter((f) => f.endsWith('.json'))
-        .map((f) => f.replace(/\.json$/, ''))
-        .sort();
-      return json(res, 200, { presets: names });
+        .map((f) => {
+          const name = f.replace(/\.json$/, '');
+          let description = '';
+          try {
+            const c = JSON.parse(fs.readFileSync(path.join(PRESETS_DIR, f), 'utf8'));
+            description = c._description || '';
+          } catch {}
+          return { name, description };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return json(res, 200, { presets: items.map((p) => p.name), descriptions: Object.fromEntries(items.map((p) => [p.name, p.description])) });
     }
     if (pathname.startsWith('/api/presets/') && req.method === 'GET') {
       const name = decodeURIComponent(pathname.slice('/api/presets/'.length));

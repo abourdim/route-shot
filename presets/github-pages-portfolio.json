@@ -1,0 +1,25 @@
+{
+  "_description": "Snapshot every github.io project in your portfolio in one batch. Each app gets autoButtons + a generic dismiss for common welcome modals.",
+  "apps": [
+    {
+      "name": "bit-playground",
+      "url": "https://abourdim.github.io/bit-playground/",
+      "dismiss": "button:has-text(\"Let's Go\")",
+      "autoButtons": true,
+      "autoButtonsBlocklist": "🌙|⚡|☁️|🔥|delete|clear|reset|connect|disconnect|firmware",
+      "maxPages": 1
+    },
+    {
+      "name": "face-quest",
+      "url": "https://abourdim.github.io/face-quest/",
+      "autoButtons": true,
+      "maxPages": 5
+    },
+    {
+      "name": "noor-cast",
+      "url": "https://abourdim.github.io/noor-cast/",
+      "autoButtons": true,
+      "maxPages": 5
+    }
+  ]
+}

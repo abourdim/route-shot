@@ -1,0 +1,20 @@
+{
+  "_description": "Authenticated SPA: log in once via preSteps, then auto-explore every button on the dashboard. preSteps replay on every reload so each variant stays authenticated.",
+  "apps": [
+    {
+      "name": "app-behind-login",
+      "url": "https://app.example.com/login",
+      "preSteps": [
+        { "action": "fill",       "selector": "input[name=email]",    "value": "demo@example.com" },
+        { "action": "fill",       "selector": "input[name=password]", "value": "hunter2" },
+        { "action": "click",      "selector": "button:has-text(\"Sign in\")" },
+        { "action": "waitForURL", "value": "**/dashboard" }
+      ],
+      "dismiss": "button:has-text(\"Got it\"), [aria-label=\"Close tour\"]",
+      "autoButtons": true,
+      "autoButtonsBlocklist": "delete|remove|clear|reset|logout|sign.?out|cancel subscription|destroy|pay",
+      "clickMode": "independent",
+      "maxPages": 1
+    }
+  ]
+}

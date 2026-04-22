@@ -1,0 +1,15 @@
+{
+  "_description": "Generic single-page app (React/Vue/Svelte): autoButtons + independent mode + sane blocklist + common-modal dismiss. Each button captured in isolation.",
+  "apps": [
+    {
+      "name": "my-spa",
+      "url": "http://localhost:3000",
+      "dismiss": "button:has-text(\"Let's Go\"), button:has-text(\"Got it\"), button:has-text(\"Accept\"), button[aria-label=\"close\"]",
+      "autoButtons": true,
+      "autoButtonsBlocklist": "delete|remove|clear|reset|logout|sign.?out|pay|confirm|send|submit|publish",
+      "autoButtonsMax": 60,
+      "clickMode": "independent",
+      "maxPages": 1
+    }
+  ]
+}

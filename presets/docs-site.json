@@ -1,0 +1,12 @@
+{
+  "_description": "Documentation site: BFS-crawl every page, one screenshot per page, no clicking. Higher maxPages cap, includes hash routes for in-page anchors.",
+  "apps": [
+    {
+      "name": "docs",
+      "url": "https://my-docs.example.com",
+      "maxPages": 100,
+      "navTimeout": 20000,
+      "includeHash": false
+    }
+  ]
+}
