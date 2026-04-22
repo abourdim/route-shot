@@ -179,6 +179,8 @@
       <button class="recipe" data-recipe="debug">Headful debug</button>
     </div>
     <div id="formFields" style="display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; align-items: flex-start;"></div>
+    <datalist id="scannedSelectors"></datalist>
+    <datalist id="scannedLabels"></datalist>
     <datalist id="dismissExamples">
       <option value='button:has-text("Let'"'"'s Go")'>
       <option value='button:has-text("Got it")'>
@@ -557,6 +559,99 @@ document.addEventListener('keydown', (e) => {
 // --- scan ------------------------------------------------------------------
 let scanItems = [];
 
+// After a scan, push selectors / labels into shared datalists so every
+// selector input in the form gets autocomplete suggestions.
+function publishScanDatalists() {
+  const selDl = $('scannedSelectors');
+  const lblDl = $('scannedLabels');
+  const seenS = new Set(), seenL = new Set();
+  selDl.innerHTML = '';
+  lblDl.innerHTML = '';
+  scanItems.forEach((it) => {
+    if (it.selector && !seenS.has(it.selector)) {
+      seenS.add(it.selector);
+      const o = document.createElement('option');
+      o.value = it.selector;
+      o.label = it.text || it.id || '';
+      selDl.appendChild(o);
+    }
+    const lbl = it.text || it.id;
+    if (lbl && !seenL.has(lbl)) {
+      seenL.add(lbl);
+      const o = document.createElement('option');
+      o.value = lbl;
+      lblDl.appendChild(o);
+    }
+  });
+  // also refresh the form so newly-added inputs get the list= attr applied
+  // (existing inputs already reference the datalist by id, so this is a no-op
+  // for them — datalists update live)
+}
+
+// Build a "Pick from scan" popover that appends a chosen selector to a textarea
+// or fills an input. Used next to the clicks textarea since textareas can't use
+// datalist directly.
+function attachScanPicker(button, target, mode = 'append') {
+  button.onclick = (e) => {
+    e.preventDefault();
+    if (!scanItems.length) { alert('Run a scan first (panel below).'); return; }
+    closeAnyPicker();
+    const pop = document.createElement('div');
+    pop.className = 'scan-picker';
+    pop.style.cssText = `position: absolute; z-index: 60; background: var(--panel);
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px;
+      max-height: 320px; overflow-y: auto; min-width: 280px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6); font-size: 13px;`;
+    const search = document.createElement('input');
+    search.placeholder = 'Filter…';
+    search.style.cssText = 'width:100%; margin-bottom:6px;';
+    pop.appendChild(search);
+    const list = document.createElement('div');
+    pop.appendChild(list);
+    function render(filter = '') {
+      list.innerHTML = '';
+      const f = filter.toLowerCase();
+      scanItems.forEach((it) => {
+        const lbl = it.text || it.id || '';
+        if (f && !lbl.toLowerCase().includes(f) && !it.selector.toLowerCase().includes(f)) return;
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:4px 6px; border-radius:3px; cursor:pointer;';
+        row.onmouseenter = () => row.style.background = 'var(--bg)';
+        row.onmouseleave = () => row.style.background = '';
+        row.innerHTML = `<code style="color:#ffa657;font-size:12px;">${escapeHtml(it.selector)}</code>` +
+          (lbl ? `<div style="font-size:11px;color:var(--mute);">${escapeHtml(lbl)}</div>` : '');
+        row.onclick = () => {
+          if (mode === 'append') {
+            const cur = target.value.trim();
+            target.value = cur ? cur + '\n' + it.selector : it.selector;
+          } else {
+            target.value = it.selector;
+          }
+          target.dispatchEvent(new Event('input'));
+          closeAnyPicker();
+        };
+        list.appendChild(row);
+      });
+      if (!list.children.length) list.innerHTML = '<div class="muted" style="padding:6px;">no matches</div>';
+    }
+    search.oninput = () => render(search.value);
+    render();
+    document.body.appendChild(pop);
+    const r = button.getBoundingClientRect();
+    pop.style.top  = (window.scrollY + r.bottom + 4) + 'px';
+    pop.style.left = (window.scrollX + r.left) + 'px';
+    setTimeout(() => search.focus(), 0);
+    pop._closeOnOutside = (ev) => { if (!pop.contains(ev.target) && ev.target !== button) closeAnyPicker(); };
+    setTimeout(() => document.addEventListener('mousedown', pop._closeOnOutside), 0);
+  };
+}
+function closeAnyPicker() {
+  document.querySelectorAll('.scan-picker').forEach((p) => {
+    if (p._closeOnOutside) document.removeEventListener('mousedown', p._closeOnOutside);
+    p.remove();
+  });
+}
+
 async function populateTargetAppSelect() {
   try {
     const r = await fetchJSON('/api/apps');
@@ -595,7 +690,9 @@ $('scanBtn').onclick = async () => {
     if (r.error) { $('scanStatus').textContent = 'Error: ' + r.error; return; }
     scanItems = r.items;
     renderScanTable();
-    $('scanStatus').textContent = `Found ${r.count} clickable element(s) — ${r.items.filter(i=>i.visible).length} visible.`;
+    publishScanDatalists();
+    $('scanStatus').textContent = `Found ${r.count} clickable element(s) — ${r.items.filter(i=>i.visible).length} visible. ` +
+      `Pickable from form-field dropdowns now.`;
     $('scanActions').style.display = 'flex';
     await populateTargetAppSelect();
   } catch (e) {
@@ -834,7 +931,15 @@ function renderForm() {
 
   const name      = inp(app.name || '', 'bit-playground');
   const url       = inp(app.url || '', 'https://example.com');
+  // dismiss: combine our examples + scanned selectors. Use a single datalist
+  // (browser merges by id, so set both via list= via a wrapper input).
   const dismiss   = inp(app.dismiss || '', '(none)', 'dismissExamples');
+  // also offer scanned selectors via a "Pick from scan" button
+  const dismissPick = document.createElement('button');
+  dismissPick.type = 'button';
+  dismissPick.textContent = '📋 Pick from scan';
+  dismissPick.style.cssText = 'font-size:11px; padding:2px 8px;';
+  attachScanPicker(dismissPick, dismiss, 'replace');
   const maxPages  = num(app.maxPages ?? '', '200');
   const includeHash = chk(app.includeHash);
   const autoBtn   = chk(app.autoButtons);
@@ -862,6 +967,7 @@ function renderForm() {
     r.style.gap = '4px';
     const a = sel(step.action || 'click', ['click', 'fill', 'press', 'goto', 'waitForSelector', 'waitForURL', 'wait']);
     const s = inp(step.selector || '', 'selector (e.g. #email or button:has-text("Sign in"))');
+    s.setAttribute('list', 'scannedSelectors');
     const v = inp(step.value ?? '', '');
     const updatePlaceholder = () => {
       const placeholders = {
@@ -880,7 +986,13 @@ function renderForm() {
     const rm = document.createElement('button');
     rm.textContent = '✕'; rm.style.padding = '0';
     rm.onclick = () => r.remove();
-    r.append(a, s, v, rm);
+    const pick = document.createElement('button');
+    pick.type = 'button'; pick.textContent = '📋';
+    pick.title = 'Pick from scan';
+    pick.style.cssText = 'padding:0; width:24px;';
+    attachScanPicker(pick, s, 'replace');
+    r.style.gridTemplateColumns = '120px 1fr 1fr 24px 24px';
+    r.append(a, s, v, pick, rm);
     preBox.appendChild(r);
   }
   (app.preSteps || []).forEach(addPreRow);
@@ -888,13 +1000,21 @@ function renderForm() {
   addBtn.textContent = '+ Add preStep';
   addBtn.onclick = () => addPreRow();
 
-  // clicks textarea, one selector per line
+  // clicks textarea, one selector per line + a "Pick from scan" button
+  const clicksWrap = document.createElement('div');
+  clicksWrap.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
   const clicks = document.createElement('textarea');
   clicks.spellcheck = false;
   clicks.style.minHeight = '80px';
   clicks.style.fontFamily = 'monospace';
   clicks.value = (app.clicks || []).join('\n');
   clicks.placeholder = '#myBtn1\n#myBtn2\nbutton:has-text("Submit")';
+  const clicksPick = document.createElement('button');
+  clicksPick.type = 'button';
+  clicksPick.textContent = '📋 Pick from scan (append)';
+  clicksPick.style.cssText = 'font-size: 11px; padding: 2px 8px; align-self: flex-start;';
+  attachScanPicker(clicksPick, clicks, 'append');
+  clicksWrap.append(clicks, clicksPick);
 
   function section(title, summaryTag, openByDefault, ...rows) {
     const d = document.createElement('details');
@@ -925,7 +1045,7 @@ function renderForm() {
       app.includeHash ? 'hash routes' : null,
     ].filter(Boolean).join(' · '),
     !!(app.dismiss || app.maxPages || app.includeHash),
-    field('dismiss', dismiss, 'Selector clicked right after page load — usually a welcome modal or cookie banner. Pick from the dropdown.'),
+    field('dismiss', dismiss, 'Selector clicked right after page load — usually a welcome modal or cookie banner. Pick from the example dropdown OR scan the page and use 📋.', { inline: [dismissPick] }),
     field('maxPages', maxPages, 'How many pages to BFS-crawl from start. <b>Set to 1</b> to snapshot only the start page.'),
     field('includeHash', includeHash, 'Treat <code>#/foo</code> and <code>#/bar</code> as separate pages (for hash-routed SPAs).'),
   );
@@ -950,7 +1070,7 @@ function renderForm() {
   section('Explicit clicks',
     `${(app.clicks || []).length} selector(s)`,
     !!(app.clicks && app.clicks.length),
-    field('clicks', clicks, 'Selectors to click (one per line). Each becomes a variant screenshot. Combine with autoButtons or use alone.'),
+    field('clicks', clicksWrap, 'Selectors to click (one per line). Each becomes a variant screenshot. Use 📋 to pick from scanned buttons.'),
   );
 
   section('Timing & debug',
