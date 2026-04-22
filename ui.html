@@ -147,20 +147,38 @@
   </section>
 
   <section class="panel">
-    <h2>apps.json</h2>
+    <h2>App editor <span class="muted" style="font-weight:normal;">(form-based)</span></h2>
     <div class="row" style="margin-bottom: 6px;">
-      <select id="presetSelect" style="flex: 1;"></select>
-      <button id="presetLoad">Load preset</button>
-      <button id="presetSave">Save current as preset…</button>
-      <button id="presetDel" class="danger" title="Delete selected preset">✕</button>
+      <select id="appPick" style="flex: 1;"></select>
+      <button id="appNew">+ New</button>
+      <button id="appDelete" class="danger">Delete</button>
+      <label class="btn" style="cursor: pointer;">
+        Upload JSON… <input type="file" id="appUpload" accept=".json" style="display:none;">
+      </label>
     </div>
-    <textarea id="appsEditor" spellcheck="false"></textarea>
-    <div class="row">
-      <button id="saveApps" class="primary">Save</button>
-      <button id="reloadApps">Reload</button>
-      <button id="formatApps">Format</button>
-      <span class="save-hint" id="saveHint">loaded</span>
+    <div id="formFields" style="display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; align-items: center;"></div>
+    <div class="row" style="margin-top: 10px;">
+      <button id="appFormSave" class="primary">Save to apps.json</button>
+      <span class="save-hint" id="formHint"></span>
     </div>
+
+    <details style="margin-top: 16px;">
+      <summary class="muted" style="cursor: pointer;">Raw JSON (advanced)</summary>
+      <div class="row" style="margin-top: 8px;">
+        <select id="presetSelect" style="flex: 1;"></select>
+        <button id="presetLoad">Load preset</button>
+        <button id="presetSave">Save current as preset…</button>
+        <button id="presetDel" class="danger" title="Delete selected preset">✕</button>
+      </div>
+      <textarea id="appsEditor" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="saveApps" class="primary">Save</button>
+        <button id="reloadApps">Reload</button>
+        <button id="formatApps">Format</button>
+        <span class="save-hint" id="saveHint">loaded</span>
+      </div>
+    </details>
+
     <details style="margin-top: 10px;">
       <summary class="muted">Import DevTools Recorder JSON</summary>
       <div class="row" style="margin-top: 10px;">
@@ -194,6 +212,7 @@
       <button id="scanVisibleBtn">Only visible</button>
       <select id="scanTargetApp"></select>
       <button id="scanAddBtn" class="primary">Add checked selectors to clicks[]</button>
+      <button id="scanBlockBtn">Add checked labels to blocklist</button>
     </div>
   </section>
 
@@ -606,12 +625,17 @@ $('scanVisibleBtn').onclick = () => {
   });
 };
 
-$('scanAddBtn').onclick = async () => {
-  const picked = [];
+async function pickedScanEntries() {
+  const out = [];
   document.querySelectorAll('#scanResults tr[data-i]').forEach((tr) => {
     const cb = tr.querySelector('.scan-cb');
-    if (cb.checked) picked.push(scanItems[Number(tr.dataset.i)].selector);
+    if (cb.checked) out.push(scanItems[Number(tr.dataset.i)]);
   });
+  return out;
+}
+
+$('scanAddBtn').onclick = async () => {
+  const picked = (await pickedScanEntries()).map((i) => i.selector);
   if (!picked.length) { alert('Nothing checked.'); return; }
   const r = await fetchJSON('/api/apps');
   const idx = Number($('scanTargetApp').value || 0);
@@ -626,6 +650,30 @@ $('scanAddBtn').onclick = async () => {
   if (save.error) { alert(save.error); return; }
   $('scanStatus').textContent = `Added ${picked.length} selector(s) to "${app.name}" · clicks[].`;
   await loadApps();
+  await initForm();
+};
+
+$('scanBlockBtn').onclick = async () => {
+  const picked = (await pickedScanEntries())
+    .map((i) => i.text || i.id)
+    .filter(Boolean);
+  if (!picked.length) { alert('Nothing checked (or labels empty).'); return; }
+  const r = await fetchJSON('/api/apps');
+  const idx = Number($('scanTargetApp').value || 0);
+  const app = (r.apps || [])[idx];
+  if (!app) { alert('App index out of range.'); return; }
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const existing = (app.autoButtonsBlocklist || '').split('|').filter(Boolean);
+  const merged = [...new Set([...existing, ...picked.map(escape)])];
+  app.autoButtonsBlocklist = merged.join('|');
+  const save = await fetchJSON('/api/apps', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(r),
+  });
+  if (save.error) { alert(save.error); return; }
+  $('scanStatus').textContent = `Added ${picked.length} label(s) to "${app.name}" · autoButtonsBlocklist.`;
+  await loadApps();
+  await initForm();
 };
 
 // --- history ----------------------------------------------------------------
@@ -662,6 +710,220 @@ const origRunSingle = $('runSingle').onclick;
 $('runSingle').onclick = async (...a) => { const r = await origRunSingle(...a); setTimeout(loadHistory, 300); return r; };
 const origScanBtn = $('scanBtn').onclick;
 $('scanBtn').onclick = async (...a) => { const r = await origScanBtn(...a); setTimeout(loadHistory, 300); return r; };
+
+// --- form-based app editor --------------------------------------------------
+let currentApps = { apps: [] };
+let currentIdx = 0;
+
+function field(label, node) {
+  const l = document.createElement('label');
+  l.className = 'muted';
+  l.textContent = label;
+  l.style.fontSize = '12px';
+  return [l, node];
+}
+
+function inp(val = '', placeholder = '') {
+  const e = document.createElement('input');
+  e.type = 'text'; e.value = val; e.placeholder = placeholder;
+  return e;
+}
+function num(val = '', placeholder = '') {
+  const e = document.createElement('input');
+  e.type = 'number'; e.value = val; e.placeholder = placeholder;
+  e.style.width = '120px';
+  return e;
+}
+function chk(val = false) {
+  const e = document.createElement('input');
+  e.type = 'checkbox'; e.checked = !!val;
+  return e;
+}
+function sel(val, options) {
+  const e = document.createElement('select');
+  for (const o of options) {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o;
+    if (o === val) opt.selected = true;
+    e.appendChild(opt);
+  }
+  return e;
+}
+
+function renderForm() {
+  const host = $('formFields');
+  host.innerHTML = '';
+  const app = currentApps.apps[currentIdx] || {};
+
+  const name     = inp(app.name || '', 'my-app');
+  const url      = inp(app.url || '', 'https://example.com');
+  const dismiss  = inp(app.dismiss || '', 'button:has-text("Let\'s Go")');
+  const maxPages = num(app.maxPages ?? '', '200');
+  const autoBtn  = chk(app.autoButtons);
+  const block    = inp(app.autoButtonsBlocklist || '', '🌙|⚡|delete|reset');
+  const blockMax = num(app.autoButtonsMax ?? '', '40');
+  const clickMode = sel(app.clickMode || 'sequential', ['sequential', 'independent']);
+  const headful   = chk(app.headful);
+
+  // preSteps dynamic rows
+  const preBox = document.createElement('div');
+  preBox.style.gridColumn = '2';
+  preBox.style.display = 'grid';
+  preBox.style.gap = '4px';
+
+  function addPreRow(step = { action: 'click', selector: '', value: '' }) {
+    const r = document.createElement('div');
+    r.style.display = 'grid';
+    r.style.gridTemplateColumns = '110px 1fr 1fr 24px';
+    r.style.gap = '4px';
+    const a = sel(step.action || 'click', ['click', 'fill', 'press', 'goto', 'waitForSelector', 'waitForURL', 'wait']);
+    const s = inp(step.selector || '', 'selector');
+    const v = inp(step.value ?? '', 'value / URL / key');
+    const rm = document.createElement('button');
+    rm.textContent = '✕'; rm.style.padding = '0';
+    rm.onclick = () => r.remove();
+    r.append(a, s, v, rm);
+    preBox.appendChild(r);
+  }
+  (app.preSteps || []).forEach(addPreRow);
+  const addBtn = document.createElement('button');
+  addBtn.textContent = '+ Add preStep';
+  addBtn.onclick = () => addPreRow();
+
+  // clicks (explicit selectors) — textarea, one per line
+  const clicks = document.createElement('textarea');
+  clicks.spellcheck = false;
+  clicks.style.minHeight = '80px';
+  clicks.style.fontFamily = 'monospace';
+  clicks.value = (app.clicks || []).join('\n');
+  clicks.placeholder = '#tabBtn1\n#tabBtn2\nbutton:has-text("Submit")';
+
+  host.append(
+    ...field('name',                name),
+    ...field('url',                 url),
+    ...field('dismiss',             dismiss),
+    ...field('maxPages',            maxPages),
+    ...field('autoButtons',         autoBtn),
+    ...field('autoButtonsBlocklist', block),
+    ...field('autoButtonsMax',      blockMax),
+    ...field('clickMode',           clickMode),
+    ...field('headful',             headful),
+    ...field('preSteps',            preBox),
+    ...field('',                    addBtn),
+    ...field('clicks (one per line)', clicks),
+  );
+
+  // store refs on host for serialization
+  host._refs = { name, url, dismiss, maxPages, autoBtn, block, blockMax, clickMode, headful, preBox, clicks };
+}
+
+function serializeForm() {
+  const r = $('formFields')._refs;
+  const out = {};
+  if (r.name.value.trim())     out.name = r.name.value.trim();
+  if (r.url.value.trim())      out.url = r.url.value.trim();
+  if (r.dismiss.value.trim())  out.dismiss = r.dismiss.value.trim();
+  if (r.maxPages.value)        out.maxPages = Number(r.maxPages.value);
+  if (r.autoBtn.checked)       out.autoButtons = true;
+  if (r.block.value.trim())    out.autoButtonsBlocklist = r.block.value.trim();
+  if (r.blockMax.value)        out.autoButtonsMax = Number(r.blockMax.value);
+  if (r.clickMode.value && r.clickMode.value !== 'sequential') out.clickMode = r.clickMode.value;
+  if (r.headful.checked)       out.headful = true;
+
+  const pre = [];
+  r.preBox.querySelectorAll(':scope > div').forEach((row) => {
+    const [a, s, v] = row.querySelectorAll('select, input');
+    if (!a) return;
+    const step = { action: a.value };
+    if (s.value.trim()) step.selector = s.value.trim();
+    if (v.value.trim()) step.value = v.value.trim();
+    pre.push(step);
+  });
+  if (pre.length) out.preSteps = pre;
+
+  const clicks = r.clicks.value.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (clicks.length) out.clicks = clicks;
+
+  return out;
+}
+
+function populateAppPick() {
+  const pick = $('appPick');
+  pick.innerHTML = '';
+  currentApps.apps.forEach((a, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${i} · ${a.name || '(unnamed)'} — ${a.url || ''}`;
+    pick.appendChild(opt);
+  });
+  if (!currentApps.apps.length) pick.innerHTML = '<option value="0">(no apps yet)</option>';
+  pick.value = Math.min(currentIdx, Math.max(0, currentApps.apps.length - 1));
+}
+
+async function initForm() {
+  currentApps = await fetchJSON('/api/apps');
+  if (!Array.isArray(currentApps.apps)) currentApps = { apps: [] };
+  currentIdx = 0;
+  populateAppPick();
+  renderForm();
+}
+
+$('appPick').onchange = () => { currentIdx = Number($('appPick').value); renderForm(); };
+
+$('appNew').onclick = () => {
+  currentApps.apps.push({ name: 'new-app', url: 'https://example.com', autoButtons: true });
+  currentIdx = currentApps.apps.length - 1;
+  populateAppPick();
+  renderForm();
+};
+
+$('appDelete').onclick = () => {
+  if (!currentApps.apps.length) return;
+  if (!confirm('Delete this app from apps.json?')) return;
+  currentApps.apps.splice(currentIdx, 1);
+  currentIdx = Math.max(0, currentIdx - 1);
+  populateAppPick();
+  renderForm();
+};
+
+$('appUpload').onchange = async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const txt = await f.text();
+  let parsed;
+  try { parsed = JSON.parse(txt); } catch (err) { alert('Invalid JSON: ' + err.message); return; }
+  // accept either a single app object, an array, or a full { apps: [...] }
+  let imported;
+  if (Array.isArray(parsed))              imported = parsed;
+  else if (Array.isArray(parsed.apps))    imported = parsed.apps;
+  else                                    imported = [parsed];
+  const merge = confirm(`Imported ${imported.length} app(s).\n\nOK = merge (append to current apps)\nCancel = replace current apps.json`);
+  if (merge) currentApps.apps.push(...imported);
+  else       currentApps = { apps: imported };
+  currentIdx = currentApps.apps.length - 1;
+  populateAppPick();
+  renderForm();
+  $('formHint').textContent = `Uploaded ${imported.length} app(s) — not saved yet`;
+  $('formHint').className = 'save-hint dirty';
+  e.target.value = '';
+};
+
+$('appFormSave').onclick = async () => {
+  // write current form back into currentApps
+  const updated = serializeForm();
+  if (!updated.name || !updated.url) { alert('name and url are required'); return; }
+  if (currentApps.apps.length === 0) currentApps.apps.push(updated);
+  else currentApps.apps[currentIdx] = updated;
+  const r = await fetchJSON('/api/apps', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(currentApps),
+  });
+  if (r.error) { alert(r.error); return; }
+  $('formHint').textContent = 'saved ✓';
+  $('formHint').className = 'save-hint saved';
+  await loadApps();  // refresh raw editor too
+  populateAppPick();
+};
 
 // --- presets ----------------------------------------------------------------
 async function loadPresets() {
@@ -712,6 +974,7 @@ loadApps();
 loadGallery();
 loadHistory();
 loadPresets();
+initForm();
 </script>
 
 </body>
