@@ -210,9 +210,9 @@ cmd_dashboard() {
         printf "${R}Missing:${NC} %s/src/server.js\n\n" "$SCRIPT_DIR"
         return 1
     fi
-    local port=8080
-    read -r -p "  Port [$port]: " p
-    port="${p:-$port}"
+    # Default 8080, override with $ROUTE_SHOT_PORT env var. No prompt — server
+    # auto-falls-back to next free port if 8080 is busy, so no user input needed.
+    local port="${ROUTE_SHOT_PORT:-8080}"
 
     # if something is already on this port, reuse it
     if curl -s -m 1 "http://localhost:$port/api/status" >/dev/null 2>&1; then
