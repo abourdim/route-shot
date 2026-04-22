@@ -26,32 +26,50 @@ BOLD=$'\033[1m'; NC=$'\033[0m'
 # any browser executable).
 open_url() {
     local url="$1"
+    # 1. Explicit override
     if [ -n "$ROUTE_SHOT_BROWSER" ] && [ -x "$ROUTE_SHOT_BROWSER" ]; then
+        printf "${B}→ Launching (ROUTE_SHOT_BROWSER): %s${NC}\n" "$ROUTE_SHOT_BROWSER"
         "$ROUTE_SHOT_BROWSER" "$url" >/dev/null 2>&1 &
         return
     fi
-    # Windows Chrome
-    for p in "/c/Program Files/Google/Chrome/Application/chrome.exe" \
-             "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
-             "$LOCALAPPDATA/Google/Chrome/Application/chrome.exe"; do
-        if [ -f "$p" ]; then "$p" "$url" >/dev/null 2>&1 & return; fi
-    done
-    # macOS Chrome
-    if [ -d "/Applications/Google Chrome.app" ]; then
-        open -a "Google Chrome" "$url"; return
+    # 2. Windows: try 'start chrome' first — works via URL association, survives
+    #    path quirks and spaces, respects existing Chrome profile. Falls back to
+    #    explicit chrome.exe paths if that fails.
+    if command -v cmd.exe >/dev/null 2>&1 || [ -n "$WINDIR" ]; then
+        # convert MSYS /c/... path if any, pass the raw URL
+        if cmd.exe /c "start chrome \"$url\"" 2>/dev/null; then
+            printf "${B}→ Launched Chrome via 'start chrome'${NC}\n"
+            return
+        fi
+        for p in "/c/Program Files/Google/Chrome/Application/chrome.exe" \
+                 "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
+                 "$LOCALAPPDATA/Google/Chrome/Application/chrome.exe"; do
+            if [ -f "$p" ]; then
+                printf "${B}→ Launching Chrome: %s${NC}\n" "$p"
+                "$p" "$url" >/dev/null 2>&1 &
+                return
+            fi
+        done
     fi
-    # Linux Chrome
+    # 3. macOS Chrome
+    if [ -d "/Applications/Google Chrome.app" ]; then
+        printf "${B}→ Launching Chrome (macOS)${NC}\n"
+        open -a "Google Chrome" "$url"
+        return
+    fi
+    # 4. Linux Chrome / Chromium
     for cmd in google-chrome google-chrome-stable chrome chromium chromium-browser; do
         if command -v "$cmd" >/dev/null 2>&1; then
+            printf "${B}→ Launching %s${NC}\n" "$cmd"
             "$cmd" "$url" >/dev/null 2>&1 &
             return
         fi
     done
-    # Last resort: OS default browser
+    # 5. OS default browser
     if   command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
     elif command -v open     >/dev/null 2>&1; then open "$url"
     elif command -v start    >/dev/null 2>&1; then start "" "$url"
-    else printf "Open manually: %s\n" "$url"
+    else printf "${Y}No browser auto-open available. Visit manually: %s${NC}\n" "$url"
     fi
 }
 
