@@ -28,13 +28,14 @@
   .status.running .dot { background: var(--warn); animation: pulse 1s infinite; }
   .status.idle .dot { background: var(--good); }
   @keyframes pulse { 50% { opacity: 0.3; } }
-  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 24px; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    padding: 20px 28px; max-width: 1760px; margin: 0 auto; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--border);
-    border-radius: 8px; padding: 14px 16px; }
-  .panel h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent);
+    border-radius: 8px; padding: 18px 22px; }
+  .panel h2 { margin: 0 0 14px; font-size: 14px; color: var(--accent);
     text-transform: uppercase; letter-spacing: 0.5px; }
-  .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+  .row { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
   button, .btn { background: var(--bg); color: var(--ink); border: 1px solid var(--border);
     padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 13px;
     transition: background .12s, border-color .12s, color .12s; }
@@ -44,6 +45,16 @@
   button.primary:hover { filter: brightness(1.1); }
   button.ghost { color: var(--mute); }
   button.ghost:hover { color: var(--ink); border-color: var(--mute); }
+  /* Quick-recipes row — looks subtler so Save/Run stand out */
+  button.recipe {
+    font-size: 12px; padding: 4px 10px; color: var(--mute);
+    background: transparent; border-color: var(--border);
+  }
+  button.recipe:hover { color: var(--accent); border-color: var(--accent);
+    background: rgba(88, 166, 255, 0.06); }
+  /* Vertical rhythm for section headings inside Export body */
+  details.panel-collapse > .panel-body h3 { margin-top: 22px; margin-bottom: 6px; }
+  details.panel-collapse > .panel-body h3:first-of-type { margin-top: 10px; }
   button.danger { color: var(--bad); border-color: var(--danger-border);
     background: var(--danger-bg); }
   button.danger:hover { background: var(--bad); color: #fff; border-color: var(--bad); }
@@ -126,17 +137,17 @@
 
   /* form-section accordion */
   details.section { border: 1px solid var(--border); border-radius: 6px;
-    background: var(--code-bg); margin-bottom: 6px; }
+    background: var(--code-bg); margin-bottom: 10px; }
   details.section[open] { background: var(--bg); }
-  details.section > summary { padding: 8px 12px; cursor: pointer; font-size: 13px;
+  details.section > summary { padding: 10px 14px; cursor: pointer; font-size: 13px;
     color: var(--accent); list-style: none; display: flex; align-items: center; gap: 8px; }
   details.section > summary::-webkit-details-marker { display: none; }
   details.section > summary::before { content: "▸"; color: var(--mute); transition: transform 0.15s; }
   details.section[open] > summary::before { transform: rotate(90deg); }
   details.section > summary .summary-tag { margin-left: auto; color: var(--mute);
     font-size: 11px; font-weight: normal; }
-  details.section > .section-body { padding: 4px 12px 12px;
-    display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; align-items: flex-start; }
+  details.section > .section-body { padding: 10px 16px 16px;
+    display: grid; grid-template-columns: 160px 1fr; gap: 10px 14px; align-items: flex-start; }
 
   /* raw JSON section — distinct toolbar + large editor */
   details.raw-json-section > summary { font-size: 14px; }
