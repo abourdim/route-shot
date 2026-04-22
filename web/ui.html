@@ -237,7 +237,9 @@
 <header>
   <h1>route-shot</h1>
   <a href="/userguide.html" target="_blank" class="muted">user guide →</a>
-  <div class="status idle" id="status"><span class="dot"></span><span id="statusText">idle</span></div>
+  <div id="crumb" class="muted" style="font-size: 12px; display: flex; gap: 6px;
+       align-items: center; overflow: hidden; white-space: nowrap;"></div>
+  <div class="status idle" id="status" style="margin-left: auto;"><span class="dot"></span><span id="statusText">idle</span></div>
 </header>
 
 <main>
@@ -812,6 +814,18 @@ $('openFolderBtn').onclick = async () => {
   if (r.error) alert(r.error);
 };
 
+// --- sticky breadcrumb -----------------------------------------------------
+// Mirror the currently-edited apps.json entry into the sticky header so the
+// user always sees which app their form edits and Run button refer to.
+function updateCrumb(app) {
+  const el = document.getElementById('crumb'); if (!el) return;
+  if (!app || (!app.name && !app.url)) { el.innerHTML = ''; return; }
+  const name = (app.name || '(unnamed)').replace(/[<>&]/g, '');
+  const url  = (app.url  || '').replace(/[<>&]/g, '');
+  el.innerHTML = `editing: <span style="color: var(--accent); font-weight: 600;">${name}</span>` +
+                 (url ? ` <span class="muted" style="overflow: hidden; text-overflow: ellipsis;">→ ${url}</span>` : '');
+}
+
 // --- session persistence (localStorage) ------------------------------------
 // Restore selected preset, edited app index, the URL inputs, and which
 // accordion sections are open across page reloads.
@@ -1109,9 +1123,9 @@ function updatePreflight() {
   const style  = $('videoStyle')?.selectedOptions[0]?.textContent.split('—')[0].trim() || '—';
   const ms     = Number($('videoFrameMs')?.value) || 0;
   const app    = $('videoApp')?.value;
-  const count  = picked || (app ? '(all in ' + app + ')' : total);
-  const durSec = picked ? (picked * ms / 1000).toFixed(1)
-                        : (app ? '~' + (total * ms / 1000).toFixed(0) : '—');
+  const effective = picked || total;   // when nothing is picked, all shots ship
+  const count  = picked || (app ? '(all in ' + app + ')' : total + ' (all)');
+  const durSec = effective ? (effective * ms / 1000).toFixed(1) : '—';
   const audioPick = $('videoAudio')?.value || '';
   const audioUrl  = $('videoAudioUrl')?.value.trim() || '';
   const audio = audioUrl ? '🎵 url' : (audioPick ? '🎵 ' + audioPick.split('/').pop() : '🔇 silent');
@@ -1965,6 +1979,7 @@ function renderForm() {
   const host = $('formFields');
   host.innerHTML = '';
   const app = currentApps.apps[currentIdx] || {};
+  updateCrumb(app);
 
   const name      = inp(app.name || '', 'bit-playground');
   const url       = inp(app.url || '', 'https://example.com');
