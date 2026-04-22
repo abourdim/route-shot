@@ -966,7 +966,7 @@ function renderForm() {
     r.style.display = 'grid';
     r.style.gridTemplateColumns = '120px 1fr 1fr 24px';
     r.style.gap = '4px';
-    const a = sel(step.action || 'click', ['click', 'fill', 'press', 'goto', 'waitForSelector', 'waitForURL', 'wait']);
+    const a = sel(step.action || 'click', ['click', 'fill', 'press', 'goto', 'waitForSelector', 'waitForURL', 'wait', 'pause']);
     const s = inp(step.selector || '', 'selector (e.g. #email or button:has-text("Sign in"))');
     s.setAttribute('list', 'scannedSelectors');
     const v = inp(step.value ?? '', '');
@@ -979,6 +979,7 @@ function renderForm() {
         waitForSelector: '(no value)',
         waitForURL: 'URL pattern (**/dashboard)',
         wait: 'milliseconds (e.g. 1000)',
+        pause: 'message shown when waiting (optional)',
       };
       v.placeholder = placeholders[a.value] || '';
     };

@@ -90,6 +90,30 @@ async function runSteps(page, steps, navTimeout) {
     else if (action === 'waitForSelector') await page.waitForSelector(step.selector, { timeout: step.timeout || 10000 });
     else if (action === 'waitForURL') await page.waitForURL(step.value || step.url, { timeout: step.timeout || 10000 });
     else if (action === 'wait')       await page.waitForTimeout(Number(step.value || step.ms || 500));
+    else if (action === 'pause') {
+      // Halts the run until the user presses Enter — for hardware pairing
+      // (Web Serial / Web Bluetooth permission), OAuth popups, anything that
+      // requires a real human click before snapshots can continue.
+      // Only meaningful in headful mode; in headless, log a warning and skip.
+      const msg = step.message || step.value || 'Do whatever you need in the browser, then press Enter to continue…';
+      if (!process.stdout.isTTY || !process.stdin.isTTY) {
+        console.warn(`[pause] non-interactive shell — skipping: ${msg}`);
+      } else {
+        process.stdout.write(`\n  ⏸  ${msg}\n  > `);
+        await new Promise((resolve) => {
+          const onData = (b) => {
+            if (b.includes(0x0a) || b.includes(0x0d)) {
+              process.stdin.removeListener('data', onData);
+              process.stdin.pause();
+              resolve();
+            }
+          };
+          process.stdin.resume();
+          process.stdin.on('data', onData);
+        });
+        process.stdout.write('  ▶  resuming\n');
+      }
+    }
     else throw new Error(`unknown preStep action: ${action}`);
   }
 }
@@ -183,7 +207,10 @@ async function captureUrl(page, url, idx, cfg, outDir) {
         await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
         await dismissAll(page, dismiss, cfg.dismissWait);
         if (Array.isArray(cfg.preSteps) && cfg.preSteps.length) {
-          await runSteps(page, cfg.preSteps, cfg.navTimeout).catch(() => {});
+          // skip 'pause' actions on reload-replay — they're one-time-only
+          // (the user already did the manual step at the very start)
+          const replaySteps = cfg.preSteps.filter((s) => s.action !== 'pause');
+          await runSteps(page, replaySteps, cfg.navTimeout).catch(() => {});
         }
       } catch (e) {
         variants.push({ label: item.label, error: `reload failed: ${e.message}` });
@@ -256,7 +283,10 @@ async function captureUrl(page, url, idx, cfg, outDir) {
         await page.goto(url, { waitUntil: 'networkidle', timeout: cfg.navTimeout });
         await dismissAll(page, dismiss, cfg.dismissWait);
         if (Array.isArray(cfg.preSteps) && cfg.preSteps.length) {
-          await runSteps(page, cfg.preSteps, cfg.navTimeout).catch(() => {});
+          // skip 'pause' actions on reload-replay — they're one-time-only
+          // (the user already did the manual step at the very start)
+          const replaySteps = cfg.preSteps.filter((s) => s.action !== 'pause');
+          await runSteps(page, replaySteps, cfg.navTimeout).catch(() => {});
         }
         for (const lab of pathLabels) {
           const loc = page.getByRole('button', { name: lab, exact: true }).first();
