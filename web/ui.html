@@ -99,11 +99,10 @@
     0%   { opacity: 0; transform: translateY(8px); }
     100% { opacity: 1; transform: translateY(0); }
   }
-  /* Run view keeps Run + App editor side-by-side since they're workflow-linked */
-  main > [data-view="run"].active { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-  @media (max-width: 1100px) {
-    main > [data-view="run"].active { grid-template-columns: 1fr; }
-  }
+  /* Run view: stacked — Run panel first (compact), App editor second (full breathing room) */
+  main > [data-view="run"].active { display: grid; grid-template-columns: 1fr; gap: 22px; }
+  /* Shrink Run's log area — the 📜 drawer mirrors it full-height */
+  main > [data-view="run"].active .logs { height: 200px; }
   .panel { background: var(--panel); border: 1px solid var(--border);
     border-radius: var(--r-lg); padding: 22px 26px;
     box-shadow: var(--shadow-sm);
@@ -1051,6 +1050,7 @@ function setView(name) {
   });
   try { localStorage.setItem(VIEW_KEY, name); } catch {}
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (typeof renderCrumb === 'function') renderCrumb();
 }
 document.querySelectorAll('.rail button[data-view]').forEach((btn) => {
   if (btn.dataset.view === 'help') return;  // opens a new tab
@@ -1376,16 +1376,67 @@ $('openFolderBtn').onclick = async () => {
 };
 
 // --- sticky breadcrumb -----------------------------------------------------
-// Mirror the currently-edited apps.json entry into the sticky header so the
-// user always sees which app their form edits and Run button refer to.
-function updateCrumb(app) {
-  const el = document.getElementById('crumb'); if (!el) return;
-  if (!app || (!app.name && !app.url)) { el.innerHTML = ''; return; }
-  const name = (app.name || '(unnamed)').replace(/[<>&]/g, '');
-  const url  = (app.url  || '').replace(/[<>&]/g, '');
-  el.innerHTML = `editing: <span style="color: var(--accent); font-weight: 600;">${name}</span>` +
-                 (url ? ` <span class="muted" style="overflow: hidden; text-overflow: ellipsis;">→ ${url}</span>` : '');
+// Shows context that depends on the active view — editing an app config only
+// when you're actually editing (Run), capturing a URL when on Manual, etc.
+function _esc(s) { return String(s || '').replace(/[<>&]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+function _crumbHtml(verb, name, tail) {
+  const head = verb ? `<span class="muted">${verb}:</span> ` : '';
+  const bold = name ? `<span style="color: var(--accent); font-weight: 600;">${_esc(name)}</span>` : '';
+  const end  = tail ? ` <span class="muted" style="overflow: hidden; text-overflow: ellipsis;">→ ${_esc(tail)}</span>` : '';
+  return head + bold + end;
 }
+function renderCrumb() {
+  const el = document.getElementById('crumb'); if (!el) return;
+  const active = document.querySelector('main > [data-view].active')?.dataset.view || 'manual';
+  // currentApps is declared further down with `let`; guard against TDZ when
+  // renderCrumb runs during early page setup.
+  let app = {};
+  try { if (typeof currentApps === 'object') app = currentApps.apps[currentIdx] || {}; }
+  catch { /* TDZ before the `let` runs */ }
+  let html = '';
+  switch (active) {
+    case 'manual': {
+      const url    = document.getElementById('manualUrl')?.value.trim();
+      const folder = document.getElementById('manualAppName')?.value.trim() || 'manual';
+      html = url ? _crumbHtml('capturing', folder, url) : _crumbHtml('manual session', folder);
+      break;
+    }
+    case 'library': {
+      const count = document.querySelectorAll('#gallery .card').length;
+      const apps  = new Set([...document.querySelectorAll('#gallery .card .name')]
+                       .map(n => n.textContent.split('/')[0])).size;
+      html = _crumbHtml('library', `${count} screenshot${count === 1 ? '' : 's'}` +
+                                    (apps ? ` · ${apps} app${apps === 1 ? '' : 's'}` : ''));
+      break;
+    }
+    case 'run':   html = app.name || app.url ? _crumbHtml('editing', app.name || '(unnamed)', app.url) : _crumbHtml('run', '(no apps yet)'); break;
+    case 'scan': {
+      const url = document.getElementById('scanUrl')?.value.trim();
+      html = url ? _crumbHtml('scanning', url) : _crumbHtml('scan', '(enter a URL)');
+      break;
+    }
+    case 'export': {
+      const vapp = document.getElementById('videoApp')?.value || document.getElementById('exportApp')?.value;
+      html = vapp ? _crumbHtml('exporting from', vapp) : _crumbHtml('export', '(pick an app folder)');
+      break;
+    }
+  }
+  el.innerHTML = html;
+}
+// Keep the old name as a thin shim for existing call sites (renderForm).
+function updateCrumb() { renderCrumb(); }
+
+// Live updates — crumb should retrack as users type URLs / pick apps.
+document.addEventListener('DOMContentLoaded', () => {
+  ['manualUrl','manualAppName','scanUrl','videoApp','exportApp'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) ['input','change'].forEach((ev) => el.addEventListener(ev, renderCrumb));
+  });
+  // Also retrack when the screenshots gallery re-renders (Library counts)
+  const gal = document.getElementById('gallery');
+  if (gal) new MutationObserver(renderCrumb).observe(gal, { childList: true });
+  renderCrumb();
+});
 
 // --- session persistence (localStorage) ------------------------------------
 // Restore selected preset, edited app index, the URL inputs, and which
